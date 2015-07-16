@@ -216,6 +216,34 @@ def createMesh(cols = 400, rows = 400):
     meshPixelArrayResolution_x = abs(meshPixelArray[0][0][0] -  meshPixelArray[0][1][0]) / 2.0
     meshPixelArrayResolution_y = abs(meshPixelArray[0][0][1] -  meshPixelArray[1][0][1]) / 2.0
 
+#Calculate the mean velocity value over the pixel mesh
+def calculateMeanVel():
+    global meshMeanVelArray
+    print('Calculating the mean velocities')
+    dim_X , dim_Y, dim_Z = meshPixelArray.shape
+    meshMeanVelArray = []
+    for y in np.arange(dim_Y):
+        row_list = []
+        for x in np.arange(dim_X):
+            # Find the edges of the square in Coord and
+            central_point_coord = meshCoordArray[x][y]
+            point_top_left_coord = central_point_coord + np.array([-abs(meshCoordArrayResolution_x), abs(meshCoordArrayResolution_y)])
+            point_bot_left_coord = central_point_coord + np.array([-abs(meshCoordArrayResolution_x), -abs(meshCoordArrayResolution_y)])
+            point_top_righ_coord = central_point_coord + np.array([abs(meshCoordArrayResolution_x), abs(meshCoordArrayResolution_y)])
+            point_bot_righ_coord = central_point_coord + np.array([abs(meshCoordArrayResolution_x), -abs(meshCoordArrayResolution_y)])
+            # then transform it into Pixel
+            central_point_pixel = meshPixelArray[x][y]
+            point_top_left_pixel = coordinatesToPixels(point_top_left_coord)
+            point_bot_left_pixel = coordinatesToPixels(point_bot_left_coord)
+            point_top_righ_pixel = coordinatesToPixels(point_top_righ_coord)
+            point_bot_righ_pixel = coordinatesToPixels(point_bot_righ_coord)
+            # Look for the points inside this square
+            
+            row_list.append((x, y))
+        meshCoordArray.append(row_list) 
+
+    meshCoordArray = np.array(meshCoordArray)
+    
 
 """ Main Code """
 readRasterData()
