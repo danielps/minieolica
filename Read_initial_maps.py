@@ -14,14 +14,15 @@ import os.path
 import math
 
 
-# Pixels to coordinates 
-def pixelsToCoordinates(P1,P2):
-    global transMatrix, transVector
+# Find the different information (translation, rotation and scalefactor) needed to change pixels to coordinates 
+def pixelsToCoordinatesIni(P1,P2):
+    global transMatrix, transVector, scaleFactor, originPointPixel, originPointCoord
     #Initial coordinates of 2 points (lower and lefter points: 1 and 2)
-    p1 = {  'x': 129668.0,
-            'y': -29854.0   }
-    p2 = {  'x': 135757.0,
-            'y': -14281.0   } 
+    print 'Calculating the needed information (translation, rotation and scalefactor) to change coordinates-raster to pixel-velocity'
+    p1 = {  'x': 129515.0,
+            'y': -29683.0   }
+    p2 = {  'x': 135770.0,
+            'y': -14263.0   } 
     #Calculate de translation vector, P1 - T = p1            
     Tx = P1[0] - p1['x']
     Ty = P1[1] - p1['y']
@@ -40,47 +41,53 @@ def pixelsToCoordinates(P1,P2):
     v_norm = v / mod_v
 
     #Calculate the angle between them
-    cos = V_norm[0][0]*v_norm[0][0]+V_norm[0][1]*v_norm[0][1]
-    sin = math.sqrt(1-cos*cos)
+    coseno = V_norm[0]*v_norm[0]+V_norm[1]*v_norm[1]
+    seno = math.sqrt(1-coseno*coseno)
     
     #Calculate the rotation matrix (P)* [(cos,-sin),(sin,cos)] = (p)
-    res = np.array([[cos,-sin],[sin,cos]])
+    res = np.array([[coseno,-seno],[seno,coseno]])
     transMatrix = np.linalg.inv(res)
-
-
-# Pixels to coordinates 
-def pixelsToCoordinates_old(P1,P2):
-    global transMatrix, transVector
-    #Initial coordinates of 2 points (lower and lefter points: 1 and 2)
-#    p1 = {  'x': 430852,
-#            'y': 4574491   }
-#    p2 = {  'x': 432152,
-#            'y': 4591231   }      
-#    p1 = {  'x': 134385.0,
-#            'y': -28817.0   }
-    p1 = {  'x': 129668.0,
-            'y': -29854.0   }
-    p2 = {  'x': 135757.0,
-            'y': -14281.0   } 
-    #Calculate de translation vector, P1 - T = p1            
-    Tx = P1[0] - p1['x']
-    Ty = P1[1] - p1['y']
-    transVector = np.array([Tx,Ty])
     
-    #Transform the 2 provided points using the transVector
-    P1 = P1 - transVector
-    P2 = P2 - transVector
+    #Calculate the scale factor, and the origin point to apply the scaling
+    scaleFactor = mod_V / mod_v
+    originPointPixel = np.array(P1)
+    originPointCoord = np.array([p1['x'],p1['y']])
     
-    #Calculate the transformation matrix (P)* [(a,b),(c,d)] = (p)
-    a = (p1['y']*P2[0]-P1[0]*p2['y'])/(p1['y']*p2['x']-p1['x']*p2['y'])
-    b = (p1['x']*P2[0]-P1[0]*p2['x'])/(p1['x']*p2['y']-p1['y']*p2['x'])
-    c = (p1['y']*P2[1]-P1[1]*p2['y'])/(p1['y']*p2['x']-p1['x']*p2['y'])
-    d = (p1['x']*P2[1]-P1[1]*p2['x'])/(p1['x']*p2['y']-p1['y']*p2['x'])
-    #return the matrix values
-    res = np.array([[a,b],[c,d]])
-    transMatrix = np.linalg.inv(res)
 
+# Coordinates to pixels
+def coordinatesToPixels(p):
+#    p = [124660,-18945]
+#    p = [129668,-29854]
+#    p = [135757,-14281]
+    #Change the point to an array
+    if not isinstance(p, ndarray):
+        p = np.array(p)
+    
+    #Find the vector p - origin    
+    v = np.array(p) - np.array(originPointCoord)
+    
+    #Calculate the module
+    mod_v = np.sqrt(v.dot(v))
+    
+    #Applying the rotation matrix
+    #transMatrix_0 = np.linalg.inv(transMatrix)
+    v_rotated =  transMatrix.dot(v)
+    
+    #Applying the scale factor
+    if mod_v != 0 :
+        mod_scaled_v = v_rotated * scaleFactor
+    else:
+        mod_scaled_v = v_rotated
+    
+    #The scaled point
+    mod_scaled_p = mod_scaled_v + originPointCoord
+    
+    #Applying the translation            
+    p_new = mod_scaled_p + transVector
 
+    #Return the new value
+    return p_new
+    
 
 # Reading velocity data (values are stored in a matrix called velArray)
 def readInitialVelocityData(vel_from = 0, vel_to = 39):
@@ -124,17 +131,17 @@ def readInitialVelocityData(vel_from = 0, vel_to = 39):
             # and look for the reference points need to pixelToCoordinates
             pix_max_x = [0,0]
             pix_min_x = [width, height]
-            velArray = np.empty((width,height))
+            velArray = np.empty((width,height+1))
             for x in range(width):
                 for y in range(height):
                     r, g, b = rgb_im.getpixel((x, y))
                     if (r, g, b) == (52, 52, 52):
                         if x > pix_max_x[0]:
-                            pix_max_x = [x,y]
+                            pix_max_x = [x,abs(y-height)]
                         if x < pix_min_x[0]:
-                            pix_min_x = [x,y]
+                            pix_min_x = [x,abs(y-height)]
                     rgb = (str(r), str(g), str(b))
-                    velArray[x,y] = rgb_colors_values[', '.join(rgb)]
+                    velArray[x,abs(y-height)] = rgb_colors_values[', '.join(rgb)]
                 if (x == width_25) : print '25% done'
                 if (x == width_50) : print '50% done'
                 if (x == width_75) : print '75% done'
@@ -175,30 +182,36 @@ def readRasterData(file = 'barcelona_raster_augusto_500x400.asc'):
 # Create the mesh of point where the calculations will be donemeshCoordArray
 # Resolution is 1/2 of the distance between two adjacent points
 def createMesh(cols = 400, rows = 400):
-    # create the same mesh now over the raster geometry
+    # create a mesh over the raster geometry
     global meshCoordArray, meshCoordArrayResolution_x, meshCoordArrayResolution_y
+    print 'Creating mesh over Raster geometry'
     dim_X , dim_Y = geoArray.shape
-    meshCoordArrayResolution_x = resolution_x * dim_x / cols
-    meshCoordArrayResolution_y = resolution_y * dim_y / rows
+    meshCoordArrayResolution_x = resolution_x * dim_X / cols
+    meshCoordArrayResolution_y = resolution_y * dim_Y / rows
     meshCoordArray = []
-    for y in np.arange(meshCoordArrayResolution_y/2.0,resolution_y * dim_y, meshCoordArrayResolution_y):
+    for y in np.arange(top_left_y+meshCoordArrayResolution_y/2.0,top_left_y+resolution_y*dim_Y, meshCoordArrayResolution_y):
         row_list = []
-        for x in np.arange(meshCoordArrayResolution_x/2.0, resolution_x *dim_x, meshCoordArrayResolution_x):
+        for x in np.arange(top_left_x+meshCoordArrayResolution_x/2.0, top_left_x+resolution_x*dim_X, meshCoordArrayResolution_x):
             row_list.append((x, y))
-        meshCoordArray.append(row_list)
+        meshCoordArray.append(row_list) 
 
     meshCoordArray = np.array(meshCoordArray)
-
-
-    # create mesh over pixel 
+    
+    # create the same mesh now over the over pixel file
+    print 'Creating mesh over velocity pixel file'
     global meshPixelArray, meshPixelArrayResolution_x, meshPixelArrayResolution_y
 
     dim_X , dim_Y, dim_Z = meshCoordArray.shape
-    meshPixelArray = np.zeros((dim_X , dim_Y))
+    meshPixelArray = []
     for Y in range(dim_Y):
+        row_list = []
         for X in range(dim_X):
-            pixel = meshPixelArray[X][Y] - transVector
-            meshCoordArray[X][Y] = transMatrix.dot(pixel)
+            #We only need to change the coordinates to pixels and store the new value in the same position
+            pixel = coordinatesToPixels(meshCoordArray[X][Y])
+            row_list.append(pixel.tolist())
+        meshPixelArray.append(row_list)
+
+    meshPixelArray = np.array(meshPixelArray)
 
     meshPixelArrayResolution_x = abs(meshPixelArray[0][0][0] -  meshPixelArray[0][1][0]) / 2.0
     meshPixelArrayResolution_y = abs(meshPixelArray[0][0][1] -  meshPixelArray[1][0][1]) / 2.0
@@ -207,6 +220,7 @@ def createMesh(cols = 400, rows = 400):
 """ Main Code """
 readRasterData()
 readInitialVelocityData(vel_from = 0, vel_to = 1)
-pixelsToCoordinates(edgePoints[0]['bottom-left'], edgePoints[0]['top-rigth'])
+pixelsToCoordinatesIni(edgePoints[0]['bottom-left'], edgePoints[0]['top-rigth'])
 createMesh(cols = 4, rows = 4)
-np.absolute
+
+
