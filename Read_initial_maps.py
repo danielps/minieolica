@@ -9,9 +9,12 @@ Script per calcular el recurs mini eolic
 # Libraries
 from PIL import Image
 from osgeo import gdal
+from osgeo import gdal_array
+from osgeo import osr
 import numpy as np
 import os.path
 import math
+from osgeo.gdalconst import *
 
 
 # Find the different information (translation, rotation and scalefactor) needed to change pixels to coordinates 
@@ -179,8 +182,7 @@ def readRasterData(file = 'barcelona_raster_augusto_500x400.asc'):
     else:
         print 'file %s does not exist' % str(path_geo + file)
 
-# Create the mesh of point where the calculations will be donemeshCoordArray
-# Resolution is 1/2 of the distance between two adjacent points
+# Create the mesh of point where the calculations will be done meshCoordArray
 def createMesh(cols = 400, rows = 400):
     # create a mesh over the raster geometry
     global meshCoordArray, meshCoordArrayResolution_x, meshCoordArrayResolution_y
@@ -197,58 +199,199 @@ def createMesh(cols = 400, rows = 400):
 
     meshCoordArray = np.array(meshCoordArray)
     
-    # create the same mesh now over the over pixel file
-    print 'Creating mesh over velocity pixel file'
-    global meshPixelArray, meshPixelArrayResolution_x, meshPixelArrayResolution_y
 
-    dim_X , dim_Y, dim_Z = meshCoordArray.shape
-    meshPixelArray = []
-    for Y in range(dim_Y):
-        row_list = []
-        for X in range(dim_X):
-            #We only need to change the coordinates to pixels and store the new value in the same position
-            pixel = coordinatesToPixels(meshCoordArray[X][Y])
-            row_list.append(pixel.tolist())
-        meshPixelArray.append(row_list)
 
-    meshPixelArray = np.array(meshPixelArray)
+# Calculating the solid angle of a point respect to one surface. If the solid angle is 0, that means that the
+# point is outside, if the value is 2PI the point is inside, and any other value the point is over one of the 
+# edges of the surface.
+def WindingNumber (p, ListSurfacePoints):
+    totalAngle = 0
+    qx = p[0]
+    qy = p[1]   
+    for i in range(1,len(ListSurfacePoints)):
+        p1 = ListSurfacePoints[i-1]
+        p2 = ListSurfacePoints[i]
+        cx_p1 = p1[0]
+        cy_p1 = p1[1]
+        cx_p2 = p2[0]
+        cy_p2 = p2[1]       
+        # vectors
+        u1 = qx - cx_p1
+        v1 = qy - cy_p1
+        u2 = qx - cx_p2
+        v2 = qy - cy_p2    	
+        # Calculating the producto escalar
+        mod = math.sqrt(pow(u1,2)+pow(v1,2)) * math.sqrt(pow(u2,2)+pow(v2,2))
+        if mod != 0:
+            prod_escalar = (u1*u2 + v1*v2) / mod
+            # To avoid rounding errors  
+            if prod_escalar > 1:
+                prod_escalar = 1
+            if prod_escalar < -1:
+                prod_escalar = -1            
+            # Calculo el signo del producto vectorial a través del area del triangulo que forman los 3 puntos
+            prod_vect = qx*cy_p1 - qy*cx_p1 + qy*cx_p2 - qx*cy_p2 + cx_p1*cy_p2 - cy_p1*cx_p2
+            # Calculo el ángulo
+            ang_sen = 0
+            ang_cos = math.acos(prod_escalar)
+            if prod_vect > 1e-6:
+                ang_sen = 1 
+            if prod_vect < -1e-6: 
+                ang_sen = -1
 
-    meshPixelArrayResolution_x = abs(meshPixelArray[0][0][0] -  meshPixelArray[0][1][0]) / 2.0
-    meshPixelArrayResolution_y = abs(meshPixelArray[0][0][1] -  meshPixelArray[1][0][1]) / 2.0
+        totalAngle = totalAngle + ang_cos*ang_sen
+         
+    return totalAngle
+
+#Return the distance between two points
+def calculateDistance(p, centralPoint):
+    if not isinstance(p, ndarray):
+        p = np.array(p)
+    if not isinstance(centralPoint, ndarray):
+        centralPoint = np.array(centralPoint)
+    v = p - centralPoint
+    dist = np.sqrt(v.dot(v))
+    return dist
+    
+    
 
 #Calculate the mean velocity value over the pixel mesh
 def calculateMeanVel():
     global meshMeanVelArray
     print('Calculating the mean velocities')
-    dim_X , dim_Y, dim_Z = meshPixelArray.shape
-    meshMeanVelArray = []
+    dim_X , dim_Y, dim_Z = meshCoordArray.shape
+    xMin = 0
+    yMin = 0
+    xMax, yMax = velArray.shape
+    minDistance_V = coordinatesToPixels(meshCoordArray[0][0])-coordinatesToPixels(meshCoordArray[1][0])
+    minDistance = np.sqrt(minDistance_V.dot(minDistance_V)) * 0.5
+    meshMeanVelArray = np.empty((dim_X,dim_Y), dtype='f') 
+    width_10 = int(dim_Y*0.1)
+    width_20 = int(dim_Y*0.2)
+    width_30 = int(dim_Y*0.3)
+    width_40 = int(dim_Y*0.4) 
+    width_50 = int(dim_Y*0.5)
+    width_60 = int(dim_Y*0.6)
+    width_70 = int(dim_Y*0.7)
+    width_80 = int(dim_Y*0.8)
+    width_90 = int(dim_Y*0.9)
+    width_100 = int(dim_Y-1)
     for y in np.arange(dim_Y):
-        row_list = []
         for x in np.arange(dim_X):
             # Find the edges of the square in Coord and
             central_point_coord = meshCoordArray[x][y]
-            point_top_left_coord = central_point_coord + np.array([-abs(meshCoordArrayResolution_x), abs(meshCoordArrayResolution_y)])
-            point_bot_left_coord = central_point_coord + np.array([-abs(meshCoordArrayResolution_x), -abs(meshCoordArrayResolution_y)])
-            point_top_righ_coord = central_point_coord + np.array([abs(meshCoordArrayResolution_x), abs(meshCoordArrayResolution_y)])
-            point_bot_righ_coord = central_point_coord + np.array([abs(meshCoordArrayResolution_x), -abs(meshCoordArrayResolution_y)])
-            # then transform it into Pixel
-            central_point_pixel = meshPixelArray[x][y]
+            point_top_left_coord = central_point_coord + np.array([-abs(meshCoordArrayResolution_x*0.5), abs(meshCoordArrayResolution_y*0.5)])
+            point_bot_left_coord = central_point_coord + np.array([-abs(meshCoordArrayResolution_x*0.5), -abs(meshCoordArrayResolution_y*0.5)])
+            point_top_righ_coord = central_point_coord + np.array([abs(meshCoordArrayResolution_x*0.5), abs(meshCoordArrayResolution_y*0.5)])
+            point_bot_righ_coord = central_point_coord + np.array([abs(meshCoordArrayResolution_x*0.5), -abs(meshCoordArrayResolution_y*0.5)])
+            #then transform it into Pixel
+            central_point_pixel = coordinatesToPixels(central_point_coord)
             point_top_left_pixel = coordinatesToPixels(point_top_left_coord)
             point_bot_left_pixel = coordinatesToPixels(point_bot_left_coord)
             point_top_righ_pixel = coordinatesToPixels(point_top_righ_coord)
             point_bot_righ_pixel = coordinatesToPixels(point_bot_righ_coord)
-            # Look for the points inside this square
             
-            row_list.append((x, y))
-        meshCoordArray.append(row_list) 
+            # Look for the points inside this square, first I look for the near points 
+            x_min = int(min(point_top_left_pixel[0],point_bot_left_pixel[0],point_top_righ_pixel[0],point_bot_righ_pixel[0]))
+            if x_min < xMin: 
+                x_min = xMin
+            elif x_min > xMax:
+                x_min = xMax
+            x_max = int(max(point_top_left_pixel[0],point_bot_left_pixel[0],point_top_righ_pixel[0],point_bot_righ_pixel[0]))
+            if x_max > xMax: 
+                x_max = xMax
+            y_min = int(min(point_top_left_pixel[1],point_bot_left_pixel[1],point_top_righ_pixel[1],point_bot_righ_pixel[1]))           
+            if y_min < yMin: 
+                y_min = yMin
+            elif y_min > yMax:
+                y_min = yMax
+            y_max = int(max(point_top_left_pixel[1],point_bot_left_pixel[1],point_top_righ_pixel[1],point_bot_righ_pixel[1]))           
+            if y_max > yMax: 
+                y_max = yMax
+            #and then I look for the inside points and points over the edges using the windingNumber
+            #listSurfacePoints = [point_top_left_pixel,point_bot_left_pixel,point_bot_righ_pixel,point_top_righ_pixel]
+            pointVelocity = []
+            for px in np.arange(x_min,x_max,2):
+                for py in np.arange(y_min,y_max,2):
+                    vel = velArray[px][py]
+                    if np.isnan(vel) == False:
+                        #isInside = WindingNumber((px,py), listSurfacePoints)
+                        #if isInside != 0:
+                        #    pointInside.append((px,py))
+                        #    pointVelocity.append(vel)
+                        distance = calculateDistance((px,py), central_point_pixel)
+                        if distance <= minDistance:
+                            pointVelocity.append(vel)
+            meshMeanVelArray[x][y] = mean(pointVelocity)
+        if (y == width_10) : print '10% done'
+        if (y == width_20) : print '20% done'
+        if (y == width_30) : print '30% done'
+        if (y == width_40) : print '40% done'
+        if (y == width_50) : print '50% done'
+        if (y == width_60) : print '60% done'
+        if (y == width_70) : print '70% done'
+        if (y == width_80) : print '80% done'
+        if (y == width_90) : print '90% done'
+        if (y == width_100): print '100% done'
 
-    meshCoordArray = np.array(meshCoordArray)
+
+
+def writeVelRaster(file='0-1.tiff'):
+    path_vel = '/home/daniel/Documentos/Ofertes/Recurs Eolic/Estudi/Dades inicials/Mapes minieolica/'
+    path_vel_file = path_vel + file
+    
+    # My array lon / lat
+    dim_X, dim_Y, dim_Z = meshCoordArray.shape
+    latArray = np.empty((dim_X,dim_Y), dtype='f')
+    lonArray = np.empty((dim_X,dim_Y), dtype='f')    
+    for y in range(dim_Y):
+        for x in range(dim_X):
+            # Find the edges of the square in Coord and
+            val = meshCoordArray[x][y].tolist()
+            latArray[x][y] = val[1]
+            lonArray[x][y] = val[0]
+   
+    # For each pixel I know it's latitude and longitude.
+    # As you'll see below you only really need the coordinates of
+    # one corner, and the resolution of the file.
+    
+    xmin,ymin,xmax,ymax = [lonArray.min(),latArray.min(),lonArray.max(),latArray.max()]
+    nrows,ncols = dim_X, dim_Y
+    xres = (xmax-xmin)/float(ncols)
+    yres = (ymax-ymin)/float(nrows)
+    geotransform=(xmin,xres,0,ymax,0, -yres)   
+    # That's (top left x, w-e pixel resolution, rotation (0 if North is up), 
+    #         top left y, rotation (0 if North is up), n-s pixel resolution)
+    # I don't know why rotation is in twice???
+    
+    output_raster = gdal.GetDriverByName('GTiff').Create(path_vel_file,ncols, nrows, 1 ,gdal.GDT_Float32)  # Open the file
+    output_raster.SetGeoTransform(geotransform)  # Specify its coordinates
+    srs = osr.SpatialReference()                 # Establish its coordinate encoding
+    srs.ImportFromEPSG(4326)                     # This one specifies WGS84 lat long.
+                                                 # Anyone know how to specify the 
+                                                 # IAU2000:49900 Mars encoding?
+    output_raster.SetProjection( srs.ExportToWkt() )   # Exports the coordinate system 
+                                                       # to the file
+    output_raster.GetRasterBand(1).WriteArray(meshMeanVelArray)
+        
     
 
 """ Main Code """
 readRasterData()
 readInitialVelocityData(vel_from = 0, vel_to = 1)
 pixelsToCoordinatesIni(edgePoints[0]['bottom-left'], edgePoints[0]['top-rigth'])
-createMesh(cols = 4, rows = 4)
+createMesh(cols = 400, rows = 400)
+calculateMeanVel()
 
 
+"""
+# Create a jpeg file with the new interpolated velocity 
+from osgeo import gdalnumeric
+meshMeanVelArrayInteger = meshMeanVelArray.astype(gdalnumeric.uint8)
+gdalnumeric.SaveArray(meshMeanVelArrayInteger, "/home/daniel/Documentos/Ofertes/Recurs Eolic/Estudi/vel2.jpeg", format='JPEG')
+m_x = meshPixelArray[0:10,0:10,0]
+m_y = meshPixelArray[0:10,0:10,1]
+m_x.tofile("/home/daniel/Documentos/Ofertes/Recurs Eolic/Estudi/x_points.csv", sep=";")
+m_y.tofile("/home/daniel/Documentos/Ofertes/Recurs Eolic/Estudi/y_points.csv", sep=";")
+meshMeanVelArray.tofile("/home/daniel/Documentos/Ofertes/Recurs Eolic/Estudi/vel_points.csv", sep=";")
+"""
