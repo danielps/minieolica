@@ -26,6 +26,14 @@ def pixelsToCoordinatesIni(P1,P2):
             'y': -29683.0   }
     p2 = {  'x': 135770.0,
             'y': -14263.0   } 
+            
+#    p1 = {  'x': 928271.0,
+#            'y': 4587398.0  }
+#    p2 = {  'x': 933208.0,
+#            'y': 4603698.2  } 
+            
+
+
     #Calculate de translation vector, P1 - T = p1            
     Tx = P1[0] - p1['x']
     Ty = P1[1] - p1['y']
@@ -155,8 +163,9 @@ def readInitialVelocityData(vel_from = 0, vel_to = 39):
 # Reading geometry data from the raster file (values are stored in a matrix called geoArray)
 def readRasterData(file = 'barcelona_raster_augusto_500x400.asc'):
     global geoArray, top_left_x, resolution_x, top_left_y, resolution_y
-    #rgb to number of yearly hours
+    #initial variables
     path_geo = '/home/daniel/Documentos/Ofertes/Recurs Eolic/Estudi/Geo Raster/'
+    ini_height = 386   # Value needed because the raster file is displaced in z
     if os.path.isfile(path_geo + file):
         print 'Reading initial geometry from file %s' % file
         src_ds = gdal.Open(path_geo + file)
@@ -166,10 +175,12 @@ def readRasterData(file = 'barcelona_raster_augusto_500x400.asc'):
         NoDataValue = srcband.GetNoDataValue()
         geoTransform = src_ds.GetGeoTransform()
         top_left_x = geoTransform[0] # top left x 
-        resolution_x = geoTransform[1] # w-e pixel resolution 
+        resolution_x = geoTransform[1] # w-e resolution 
         top_left_y = geoTransform[3] # top left y
-        resolution_y = geoTransform[5] # n-s pixel resolution 
+        resolution_y = geoTransform[5] # n-s resolution 
         geoArray = srcband.ReadAsArray(0, 0, cols, rows)
+        # Considering the initial_height
+        geoArray = geoArray - ini_height
         # Changing NoDataValue into dataArray to nan
         geoArray[geoArray == NoDataValue] = nan
         #How to calculate the mean excluding nan values
@@ -337,8 +348,8 @@ def calculateMeanVel():
 
 
 def writeVelRaster(file='0-1.tiff'):
-    path_vel = '/home/daniel/Documentos/Ofertes/Recurs Eolic/Estudi/Dades inicials/Mapes minieolica/'
-    path_vel_file = path_vel + file
+    path = '/home/daniel/Documentos/Ofertes/Recurs Eolic/Estudi/Dades inicials/Mapes minieolica/'
+    path_file = path + file
     
     # My array lon / lat
     dim_X, dim_Y, dim_Z = meshCoordArray.shape
@@ -346,7 +357,6 @@ def writeVelRaster(file='0-1.tiff'):
     lonArray = np.empty((dim_X,dim_Y), dtype='f')    
     for y in range(dim_Y):
         for x in range(dim_X):
-            # Find the edges of the square in Coord and
             val = meshCoordArray[x][y].tolist()
             latArray[x][y] = val[1]
             lonArray[x][y] = val[0]
@@ -364,7 +374,7 @@ def writeVelRaster(file='0-1.tiff'):
     #         top left y, rotation (0 if North is up), n-s pixel resolution)
     # I don't know why rotation is in twice???
     
-    output_raster = gdal.GetDriverByName('GTiff').Create(path_vel_file,ncols, nrows, 1 ,gdal.GDT_Float32)  # Open the file
+    output_raster = gdal.GetDriverByName('GTiff').Create(path_file,ncols, nrows, 1 ,gdal.GDT_Float32)  # Open the file
     output_raster.SetGeoTransform(geotransform)  # Specify its coordinates
     srs = osr.SpatialReference()                 # Establish its coordinate encoding
     srs.ImportFromEPSG(4326)                     # This one specifies WGS84 lat long.
