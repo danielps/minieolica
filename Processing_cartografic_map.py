@@ -119,9 +119,10 @@ def readInitialMap(filename='Predios_bcn_ETRS89.srl'):
                 coordinates = line.split(';')[-1]
                 coordinates = coordinates.split('|')[0:-1]
                 #print 'coor: ', coordinates
-                coor = [[float(coordinates[n]), float(coordinates[n+1])] for n in xrange(0,len(coordinates),2)]
-                newCoor = readInitialMapCheckPoints(coor)
-                if len(coor) > len(newCoor): print 'removed: %s of %s' % (len(newCoor),len(coor))
+                newCoor = [[float(coordinates[n]), float(coordinates[n+1])] for n in xrange(0,len(coordinates),2)]
+                #coor = [[float(coordinates[n]), float(coordinates[n+1])] for n in xrange(0,len(coordinates),2)]
+                #newCoor = readInitialMapCheckPoints(coor)
+                #if len(coor) > len(newCoor): print 'removed from parcel: %s %s of %s' % (parcelId,len(newCoor),len(coor))
                 #print 'coor new: ', newCoor
                 center = np.mean(newCoor, axis=0)
                 #print 'center: ', center
@@ -129,7 +130,7 @@ def readInitialMap(filename='Predios_bcn_ETRS89.srl'):
                 parcelId = line.split('|')[4]
                 parcelId = parcelId.replace('#RISKUE', '')
                 RiskueId = line.rstrip().split('|')[-1]
-                print 'parcel: ', parcelId
+                #print 'parcel: ', parcelId
                 #print 'riskue: ', RiskueId
                 cartographicMapArray.append([parcelId,RiskueId,newCoor,center.tolist()])
             #if i > 3: break
@@ -142,11 +143,12 @@ def readInitialMapCheckPoints(listPoints):
     newListPoints = listPoints
     for i in listPoints:
         for j in listPoints:
-            #print i, ' ', j, ' ', calculateDistance(i,j)
-            if i != j and calculateDistance(i,j) < 1.0:
-                #print 'remove'
+            print i, ' ', j, ' ', calculateDistance(i,j)
+            if i != j and calculateDistance(i,j) < 2.0:
+                print 'removed point: %s' % j
                 newListPoints.remove(j)
     return newListPoints
+    
 
 # Reading geometry data from the raster file (values are stored in a matrix called geoArray)
 def readRasterData(file = 'barcelona_raster_augusto_500x400.asc'):
@@ -181,7 +183,7 @@ def readRasterData(file = 'barcelona_raster_augusto_500x400.asc'):
 # edges of the surface.
 def WindingNumber (p, ListSurfacePoints):
     totalAngle = 0
-    """The points are normalized using p as origin """
+    """The points are normalized using p as origin amb scaled using 1/1000 """
     #qx = p[0]
     #qy = p[1] 
     qx = 0.0
@@ -193,10 +195,10 @@ def WindingNumber (p, ListSurfacePoints):
         #cy_p1 = p1[1]
         #cx_p2 = p2[0]
         #cy_p2 = p2[1] 
-        cx_p1 = p1[0]-p[0]
-        cy_p1 = p1[1]-p[1]
-        cx_p2 = p2[0]-p[0]
-        cy_p2 = p2[1]-p[1]   
+        cx_p1 = (p1[0]-p[0])*0.001
+        cy_p1 = (p1[1]-p[1])*0.001
+        cx_p2 = (p2[0]-p[0])*0.001
+        cy_p2 = (p2[1]-p[1])*0.001  
         # vectors
         u1 = qx - cx_p1
         v1 = qy - cy_p1
@@ -220,8 +222,9 @@ def WindingNumber (p, ListSurfacePoints):
                 ang_sen = 1 
             if prod_vect < -1e-6: 
                 ang_sen = -1
-
-        totalAngle = totalAngle + ang_cos*ang_sen
+                
+            #print '%s %s %s %s %s %s'  % (p1, p2, mod, prod_escalar, prod_vect, totalAngle)
+            totalAngle = totalAngle + ang_cos*ang_sen
          
     return totalAngle
 
@@ -285,8 +288,13 @@ def calculateRasterInsideCartographic():
                     isInside = WindingNumber(p, listSurfacePoints)
                     if abs(isInside) > 5e-1:
                         print 'is inside ', isInside
-                        rasterInsideCartographicArray[x][y] = (cartographicMapArray[i][0],cartographicMapArray[i][1])
-                        break
+                        ini = rasterInsideCartographicArray[x][y]
+                        if ini == 0:
+                            rasterInsideCartographicArray[x][y] = [[cartographicMapArray[i][0],cartographicMapArray[i][1]]]
+                        else: 
+                            ini.append([cartographicMapArray[i][0],cartographicMapArray[i][1]])
+                            rasterInsideCartographicArray[x][y] = ini
+            print ini            
             break
         break
         if (y == width_10) : print '10% done'
