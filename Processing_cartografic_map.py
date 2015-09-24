@@ -19,7 +19,7 @@ import os.path
 import math
 from osgeo.gdalconst import *
 
-
+ 
 # Find the different information (translation, rotation and scalefactor) needed to change pixels to coordinates 
 def pixelsToCoordinatesIni(P1,P2):
     global transMatrix, transVector, scaleFactor, originPointPixel, originPointCoord
