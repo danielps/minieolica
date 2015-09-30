@@ -1,22 +1,20 @@
 # -*- coding: utf-8 -*-
 """
 Created on Tue Jul  7 16:37:39 2015
-
 Script per calcular el recurs mini eolic:
 Processat del mapa cartografic per generar un nou fitxer amb la info 
 de cada punt del raster si pertany o no a un edifici, i si pertany a quin 
 i quin tipus
-
 @author: daniel
 """
 # Libraries
-from PIL import Image
 from osgeo import gdal
 from osgeo import gdal_array
 from osgeo import osr
 import numpy as np
 import os.path
 import math
+import csv
 from osgeo.gdalconst import *
 
  
@@ -108,6 +106,7 @@ def readInitialMap(filename='Predios_bcn_ETRS89.srl'):
     global cartographicMapArray
     cartographicMapArray = []
     path_cad = '/home/daniel/Documentos/Ofertes/Recurs Eolic/Estudi/Cadastro/'
+    #path_cad = '/home/xcipriano/Escriptori/MiniEolica/Cadastro/'
     if os.path.isfile(path_cad + filename):
         print 'Reading serialized cadastre from file %s' % filename
         file = open(path_cad + filename, 'r')
@@ -125,6 +124,14 @@ def readInitialMap(filename='Predios_bcn_ETRS89.srl'):
                 #if len(coor) > len(newCoor): print 'removed from parcel: %s %s of %s' % (parcelId,len(newCoor),len(coor))
                 #print 'coor new: ', newCoor
                 center = np.mean(newCoor, axis=0)
+                min_xy = np.min(newCoor, axis=0)
+                max_xy = np.max(newCoor, axis=0)
+                square = [[min_xy[0], max_xy[1]], [max_xy[0], max_xy[1]], [max_xy[0], min_xy[1]], [min_xy[0], min_xy[1]], [min_xy[0], max_xy[1]]]
+                #print newCoor
+                #print min_xy
+                #print max_xy
+                #print center
+                #print square
                 #print 'center: ', center
             else:
                 parcelId = line.split('|')[4]
@@ -132,7 +139,8 @@ def readInitialMap(filename='Predios_bcn_ETRS89.srl'):
                 RiskueId = line.rstrip().split('|')[-1]
                 #print 'parcel: ', parcelId
                 #print 'riskue: ', RiskueId
-                cartographicMapArray.append([parcelId,RiskueId,newCoor,center.tolist()])
+                if RiskueId != 0 :
+                    cartographicMapArray.append([parcelId,RiskueId,newCoor,center.tolist(),square])
             #if i > 3: break
     else: 
         print 'file %s does not exist' % str(path_cad + filename)      
@@ -155,6 +163,7 @@ def readRasterData(file = 'barcelona_raster_augusto_500x400.asc'):
     global geoArray, top_left_x, resolution_x, top_left_y, resolution_y
     #initial variables
     path_geo = '/home/daniel/Documentos/Ofertes/Recurs Eolic/Estudi/Geo Raster/'
+    #path_geo = '/home/xcipriano/Escriptori/MiniEolica/Geo Raster/'
     ini_height = 386   # Value needed because the raster file is displaced in z
     if os.path.isfile(path_geo + file):
         print 'Reading initial geometry from file %s' % file
@@ -183,22 +192,21 @@ def readRasterData(file = 'barcelona_raster_augusto_500x400.asc'):
 # edges of the surface.
 def WindingNumber (p, ListSurfacePoints):
     totalAngle = 0
-    """The points are normalized using p as origin amb scaled using 1/1000 """
-    #qx = p[0]
-    #qy = p[1] 
-    qx = 0.0
-    qy = 0.0 
+    qx = p[0]
+    qy = p[1] 
+    #qx = 0.0
+    #qy = 0.0 
     for i in range(1,len(ListSurfacePoints)):
         p1 = ListSurfacePoints[i-1]
         p2 = ListSurfacePoints[i]
-        #cx_p1 = p1[0]
-        #cy_p1 = p1[1]
-        #cx_p2 = p2[0]
-        #cy_p2 = p2[1] 
-        cx_p1 = (p1[0]-p[0])*0.001
-        cy_p1 = (p1[1]-p[1])*0.001
-        cx_p2 = (p2[0]-p[0])*0.001
-        cy_p2 = (p2[1]-p[1])*0.001  
+        cx_p1 = p1[0]
+        cy_p1 = p1[1]
+        cx_p2 = p2[0]
+        cy_p2 = p2[1] 
+        #cx_p1 = (p1[0]-p[0])
+        #cy_p1 = (p1[1]-p[1])
+        #cx_p2 = (p2[0]-p[0])
+        #cy_p2 = (p2[1]-p[1])  
         # vectors
         u1 = qx - cx_p1
         v1 = qy - cy_p1
@@ -251,7 +259,6 @@ def calculateRasterInsideCartographic():
     for y in np.arange(top_left_y, top_left_y+resolution_y*dim_Y, resolution_y):
         row_list = []
         for x in np.arange(top_left_x, top_left_x+resolution_x*dim_X, resolution_x):
-            """tranformating coordinates is needed"""
             row_list.append((x, y))
         rasterCoordArray.append(row_list) 
 
@@ -274,27 +281,31 @@ def calculateRasterInsideCartographic():
             print x, ' ', y
             # Find the edges of the square in Coord and
             p = rasterCoordArray[x][y]
-            print p
+            #print p
+            """tranformating coordinates is needed"""
             #then transform it into UTM coordinates
             #p = coordinatesToPixels(p)   
-            p = [932912.591045, 4601664.363319]
+            p = [932952.591045, 4601664.363319]
+            p = [932814, 4601531]
             #and then I look for the inside points and points over the edges using the windingNumber
             for i in range(0,len(cartographicMapArray)):
                 center = cartographicMapArray[i][3]
                 distance = calculateDistance(center, p)
                 if distance <= minDistance:
-                    print cartographicMapArray[i][0]
-                    listSurfacePoints = cartographicMapArray[i][2]
-                    isInside = WindingNumber(p, listSurfacePoints)
-                    if abs(isInside) > 5e-1:
-                        print 'is inside ', isInside
-                        ini = rasterInsideCartographicArray[x][y]
-                        if ini == 0:
-                            rasterInsideCartographicArray[x][y] = [[cartographicMapArray[i][0],cartographicMapArray[i][1]]]
-                        else: 
-                            ini.append([cartographicMapArray[i][0],cartographicMapArray[i][1]])
-                            rasterInsideCartographicArray[x][y] = ini
-            print ini            
+                    isInsideSquare = WindingNumber(p, cartographicMapArray[i][4])
+                    if abs(isInsideSquare) > 5e-2:
+                        print cartographicMapArray[i][0]
+                        listSurfacePoints = cartographicMapArray[i][2]
+                        isInside = WindingNumber(p, listSurfacePoints)
+                        if abs(isInside) > 5e-1:
+                            print 'is inside ', isInside
+                            ini = rasterInsideCartographicArray[x][y]
+                            if ini == 0:
+                                rasterInsideCartographicArray[x][y] = [[cartographicMapArray[i][0],cartographicMapArray[i][1]]]
+                            else: 
+                                ini.append([cartographicMapArray[i][0],cartographicMapArray[i][1]])
+                                rasterInsideCartographicArray[x][y] = ini
+            print rasterInsideCartographicArray[x][y]            
             break
         break
         if (y == width_10) : print '10% done'
@@ -307,45 +318,16 @@ def calculateRasterInsideCartographic():
         if (y == width_80) : print '80% done'
         if (y == width_90) : print '90% done'
         if (y == width_100): print '100% done'
+        
+    print('Saving the info cartographic into file')
+    path_geo = '/home/daniel/Documentos/Ofertes/Recurs Eolic/Estudi/Geo Raster/'
+    #path_geo = '/home/xcipriano/Escriptori/MiniEolica/Geo Raster/'
+    fl = open(path_geo + "infoCartographic.csv", 'w')
+    writer = csv.writer(fl, delimiter=';')
+    for values in rasterInsideCartographicArray:
+        writer.writerow(values)
+    fl.close()    
 
-
-
-def writeVelRaster(file='0-1.tiff'):
-    path = '/home/daniel/Documentos/Ofertes/Recurs Eolic/Estudi/Dades inicials/Mapes minieolica/'
-    path_file = path + file
-    
-    # My array lon / lat
-    dim_X, dim_Y, dim_Z = meshCoordArray.shape
-    latArray = np.empty((dim_X,dim_Y), dtype='f')
-    lonArray = np.empty((dim_X,dim_Y), dtype='f')    
-    for y in range(dim_Y):
-        for x in range(dim_X):
-            val = meshCoordArray[x][y].tolist()
-            latArray[x][y] = val[1]
-            lonArray[x][y] = val[0]
-   
-    # For each pixel I know it's latitude and longitude.
-    # As you'll see below you only really need the coordinates of
-    # one corner, and the resolution of the file.
-    
-    xmin,ymin,xmax,ymax = [lonArray.min(),latArray.min(),lonArray.max(),latArray.max()]
-    nrows,ncols = dim_X, dim_Y
-    xres = (xmax-xmin)/float(ncols)
-    yres = (ymax-ymin)/float(nrows)
-    geotransform=(xmin,xres,0,ymax,0, -yres)   
-    # That's (top left x, w-e pixel resolution, rotation (0 if North is up), 
-    #         top left y, rotation (0 if North is up), n-s pixel resolution)
-    # I don't know why rotation is in twice???
-    
-    output_raster = gdal.GetDriverByName('GTiff').Create(path_file,ncols, nrows, 1 ,gdal.GDT_Float32)  # Open the file
-    output_raster.SetGeoTransform(geotransform)  # Specify its coordinates
-    srs = osr.SpatialReference()                 # Establish its coordinate encoding
-    srs.ImportFromEPSG(4326)                     # This one specifies WGS84 lat long.
-                                                 # Anyone know how to specify the 
-                                                 # IAU2000:49900 Mars encoding?
-    output_raster.SetProjection( srs.ExportToWkt() )   # Exports the coordinate system 
-                                                       # to the file
-    output_raster.GetRasterBand(1).WriteArray(meshMeanVelArray)
         
     
 
@@ -366,6 +348,3 @@ m_x.tofile("/home/daniel/Documentos/Ofertes/Recurs Eolic/Estudi/x_points.csv", s
 m_y.tofile("/home/daniel/Documentos/Ofertes/Recurs Eolic/Estudi/y_points.csv", sep=";")
 meshMeanVelArray.tofile("/home/daniel/Documentos/Ofertes/Recurs Eolic/Estudi/vel_points.csv", sep=";")
 """
-
-
-
