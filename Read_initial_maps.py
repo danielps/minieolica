@@ -23,14 +23,7 @@ def pixelsToCoordinatesIni(P1,P2):
     p1 = {  'x': 129515.0,
             'y': -29683.0   }
     p2 = {  'x': 135770.0,
-            'y': -14263.0   } 
-            
-#    p1 = {  'x': 928271.0,
-#            'y': 4587398.0  }
-#    p2 = {  'x': 933208.0,
-#            'y': 4603698.2  } 
-            
-
+            'y': -14263.0   }           
 
     #Calculate de translation vector, P1 - T = p1            
     Tx = P1[0] - p1['x']
@@ -182,12 +175,12 @@ def readRasterData(file = 'barcelona_raster_augusto_500x400.asc'):
         # Changing NoDataValue into dataArray to nan
         geoArray[geoArray == NoDataValue] = nan
         #How to calculate the mean excluding nan values
-        mdat = np.ma.masked_array(geoArray[1,],np.isnan(geoArray[1,]))
-        mm = np.mean(mdat)
-        mm1 = np.sum(mdat)
-        mm2 = np.std(mdat)
-        mm3 = np.min(mdat)
-        mm4 = np.max(mdat)
+        #mdat = np.ma.masked_array(geoArray[1,],np.isnan(geoArray[1,]))
+        #mm = np.mean(mdat)
+        #mm1 = np.sum(mdat)
+        #mm2 = np.std(mdat)
+        #mm3 = np.min(mdat)
+        #mm4 = np.max(mdat)
     else:
         print 'file %s does not exist' % str(path_geo + file)
 
@@ -387,10 +380,10 @@ def writeVelRaster(file='0-1.tiff'):
 def newCalculatedVelocity(height, meanVel, Zo_local):
         global newvel,Uubl,Zubl,Zo_ref
         print('Calculating new velocities')
-        Zo_ref=0.14
-        Zubl=200
-        Uubl=meanVel*(log(Zubl/Zo_ref)/log(10/Zo_ref))
-        newVel=Uubl*(log(height/Zo_local)/log(Zubl/Zo_local))
+        Zo_ref = 0.14
+        Zubl = 200
+        Uubl = meanVel*(log(Zubl/Zo_ref)/log(10/Zo_ref))
+        newVel = Uubl*(log(height/Zo_local)/log(Zubl/Zo_local))
         
         return newVel  
         
@@ -424,7 +417,8 @@ def CalculateRugosity(medheight, density):
         if medheight > 20:
             print('high-rise')
             h = 4
-        else: print('Land')
+        else: 
+            print('Land')
             h = 0                     #We considered there is no construction
              
         print('Clasificating Parcel density')
@@ -437,20 +431,18 @@ def CalculateRugosity(medheight, density):
         if 0.4 < density:
             print ('High density')
             d = 2
-        else: print('Error Calculating Density'):
+        else: 
+            print('Error Calculating Density')
         
         print('Calculating Zo')
         global x, r                       #r=Rugosty
         x=((h+d)/2)
         if x>2.5:
             r=2
-            print ('Rugosity=' r)
-        if x=2.5:
-            r=1.5
-            print ('Rugosity=' r)
-                
-                ..
-                ...
+            print 'Rugosity = %s' % r
+        if x==2.5:
+            r = 1.5
+            print 'Rugosity = %s' % r
         
     
 
@@ -472,3 +464,4 @@ m_y = meshPixelArray[0:10,0:10,1]
 m_x.tofile("/home/daniel/Documentos/Ofertes/Recurs Eolic/Estudi/x_points.csv", sep=";")
 m_y.tofile("/home/daniel/Documentos/Ofertes/Recurs Eolic/Estudi/y_points.csv", sep=";")
 meshMeanVelArray.tofile("/home/daniel/Documentos/Ofertes/Recurs Eolic/Estudi/vel_points.csv", sep=";")
+"""

@@ -19,19 +19,19 @@ from osgeo.gdalconst import *
 
  
 # Find the different information (translation, rotation and scalefactor) needed to change pixels to coordinates 
-def pixelsToCoordinatesIni(P1,P2):
+def rasterToCoordinatesIni():
     global transMatrix, transVector, scaleFactor, originPointPixel, originPointCoord
     #Initial coordinates of 2 points (lower and lefter points: 1 and 2)
     print 'Calculating the needed information (translation, rotation and scalefactor) to change coordinates-raster to pixel-velocity'
-    p1 = {  'x': 129515.0,
+    P1 = {  'x': 129515.0,
             'y': -29683.0   }
-    p2 = {  'x': 135770.0,
-            'y': -14263.0   } 
+    P2 = {  'x': 135770.0,
+            'y': -14263.0   }   
             
-#    p1 = {  'x': 928271.0,
-#            'y': 4587398.0  }
-#    p2 = {  'x': 933208.0,
-#            'y': 4603698.2  } 
+    p1 = {  'x': 928271.0,
+            'y': 4587398.0  }
+    p2 = {  'x': 933208.0,
+            'y': 4603698.2  } 
             
 
 
@@ -194,8 +194,6 @@ def WindingNumber (p, ListSurfacePoints):
     totalAngle = 0
     qx = p[0]
     qy = p[1] 
-    #qx = 0.0
-    #qy = 0.0 
     for i in range(1,len(ListSurfacePoints)):
         p1 = ListSurfacePoints[i-1]
         p2 = ListSurfacePoints[i]
@@ -203,10 +201,6 @@ def WindingNumber (p, ListSurfacePoints):
         cy_p1 = p1[1]
         cx_p2 = p2[0]
         cy_p2 = p2[1] 
-        #cx_p1 = (p1[0]-p[0])
-        #cy_p1 = (p1[1]-p[1])
-        #cx_p2 = (p2[0]-p[0])
-        #cy_p2 = (p2[1]-p[1])  
         # vectors
         u1 = qx - cx_p1
         v1 = qy - cy_p1
@@ -332,6 +326,7 @@ def calculateRasterInsideCartographic():
     
 
 """ Main Code """
+rasterToCoordinatesIni()
 readInitialMap()
 readRasterData()
 calculateRasterInsideCartographic()
