@@ -1,9 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 Created on Tue Jul  7 16:37:39 2015
-
 Script per calcular el recurs mini eolic
-
 @author: daniel
 """
 # Libraries
@@ -383,6 +381,76 @@ def writeVelRaster(file='0-1.tiff'):
     output_raster.SetProjection( srs.ExportToWkt() )   # Exports the coordinate system 
                                                        # to the file
     output_raster.GetRasterBand(1).WriteArray(meshMeanVelArray)
+    
+    
+#Calculate the new velocity value over each point        
+def newCalculatedVelocity(height, meanVel, Zo_local):
+        global newvel,Uubl,Zubl,Zo_ref
+        print('Calculating new velocities')
+        Zo_ref=0.14
+        Zubl=200
+        Uubl=meanVel*(log(Zubl/Zo_ref)/log(10/Zo_ref))
+        newVel=Uubl*(log(height/Zo_local)/log(Zubl/Zo_local))
+        
+        return newVel  
+        
+#Calculate Medium height in each parcel             
+def CalculateMediumHeight(height):
+        global medheight
+        medheight
+        
+        return medheight
+        
+#Calculate Buildings density in each parcel             
+def CalculateBuildingDensity():
+        
+        
+        return density        
+        
+#Calculate rugosity in each parcel             
+def CalculateRugosity(medheight, density):
+        global Zo, h, d
+        
+        print('Clasificating Parcel Height')
+        if 5 < medheight <= 7.5: 
+            print('Low range')
+            h = 1
+        if 7.5 < medheight <= 12: 
+            print('Medium range')
+            h = 2
+        if 12 < medheight <= 20:
+            print('Tall range')
+            h = 3
+        if medheight > 20:
+            print('high-rise')
+            h = 4
+        else: print('Land')
+            h = 0                     #We considered there is no construction
+             
+        print('Clasificating Parcel density')
+        if 0.2 > density:
+            print ('Low density')
+            d = 0
+        if 0.2 < density < 0.4:
+            print ('Medium density')
+            d = 1
+        if 0.4 < density:
+            print ('High density')
+            d = 2
+        else: print('Error Calculating Density'):
+        
+        print('Calculating Zo')
+        global x, r                       #r=Rugosty
+        x=((h+d)/2)
+        if x>2.5:
+            r=2
+            print ('Rugosity=' r)
+        if x=2.5:
+            r=1.5
+            print ('Rugosity=' r)
+                
+                ..
+                ...
         
     
 
@@ -404,7 +472,3 @@ m_y = meshPixelArray[0:10,0:10,1]
 m_x.tofile("/home/daniel/Documentos/Ofertes/Recurs Eolic/Estudi/x_points.csv", sep=";")
 m_y.tofile("/home/daniel/Documentos/Ofertes/Recurs Eolic/Estudi/y_points.csv", sep=";")
 meshMeanVelArray.tofile("/home/daniel/Documentos/Ofertes/Recurs Eolic/Estudi/vel_points.csv", sep=";")
-"""
-
-
-
