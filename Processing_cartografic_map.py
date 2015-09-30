@@ -23,17 +23,17 @@ def rasterToCoordinatesIni():
     global transMatrix, transVector, scaleFactor, originPointPixel, originPointCoord
     #Initial coordinates of 2 points (lower and lefter points: 1 and 2)
     print 'Calculating the needed information (translation, rotation and scalefactor) to change coordinates-raster to pixel-velocity'
-    P1 = {  'x': 129515.0,
-            'y': -29683.0   }
-    P2 = {  'x': 135770.0,
-            'y': -14263.0   }   
+    P0 = [ 129515.0, -29683.0 ]
+    P1 = [ 134406.6, -28823.2]
+    P2 = [ 135770.0, -14263.0 ]
             
-    p1 = {  'x': 928271.0,
+    p0 = {  'x': 928271.0,
             'y': 4587398.0  }
+    p1 = {  'x': 932813.15,
+            'y': 4588862.0  }
     p2 = {  'x': 933208.0,
             'y': 4603698.2  } 
             
-
 
     #Calculate de translation vector, P1 - T = p1            
     Tx = P1[0] - p1['x']
@@ -67,10 +67,10 @@ def rasterToCoordinatesIni():
     
 
 # Coordinates to pixels
-def coordinatesToPixels(p):
-#    p = [124660,-18945]
-#    p = [129668,-29854]
-#    p = [135757,-14281]
+def rasterToCoordinates(p):
+    #p = [124660,-18945]
+    #p = [129668,-29854]
+    #p = [135757,-14281]
     #Change the point to an array
     if not isinstance(p, ndarray):
         p = np.array(p)
@@ -272,15 +272,14 @@ def calculateRasterInsideCartographic():
     minDistance = 1500
     for y in np.arange(dim_Y):
         for x in np.arange(dim_X):
-            print x, ' ', y
+            #print x, ' ', y
             # Find the edges of the square in Coord and
             p = rasterCoordArray[x][y]
             #print p
-            """tranformating coordinates is needed"""
             #then transform it into UTM coordinates
-            #p = coordinatesToPixels(p)   
-            p = [932952.591045, 4601664.363319]
-            p = [932814, 4601531]
+            p = rasterToCoordinates(p)   
+            #p = [932952.591045, 4601664.363319]
+            #p = [932814, 4601531]
             #and then I look for the inside points and points over the edges using the windingNumber
             for i in range(0,len(cartographicMapArray)):
                 center = cartographicMapArray[i][3]
@@ -288,20 +287,18 @@ def calculateRasterInsideCartographic():
                 if distance <= minDistance:
                     isInsideSquare = WindingNumber(p, cartographicMapArray[i][4])
                     if abs(isInsideSquare) > 5e-2:
-                        print cartographicMapArray[i][0]
+                        #print cartographicMapArray[i][0]
                         listSurfacePoints = cartographicMapArray[i][2]
                         isInside = WindingNumber(p, listSurfacePoints)
                         if abs(isInside) > 5e-1:
-                            print 'is inside ', isInside
+                            #print 'is inside ', isInside
                             ini = rasterInsideCartographicArray[x][y]
                             if ini == 0:
                                 rasterInsideCartographicArray[x][y] = [[cartographicMapArray[i][0],cartographicMapArray[i][1]]]
                             else: 
                                 ini.append([cartographicMapArray[i][0],cartographicMapArray[i][1]])
                                 rasterInsideCartographicArray[x][y] = ini
-            print rasterInsideCartographicArray[x][y]            
-            break
-        break
+            #print rasterInsideCartographicArray[x][y]            
         if (y == width_10) : print '10% done'
         if (y == width_20) : print '20% done'
         if (y == width_30) : print '30% done'
