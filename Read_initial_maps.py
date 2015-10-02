@@ -62,7 +62,7 @@ def coordinatesToPixels(p):
 #    p = [129668,-29854]
 #    p = [135757,-14281]
     #Change the point to an array
-    if not isinstance(p, ndarray):
+    if not isinstance(p, np.ndarray):
         p = np.array(p)
     
     #Find the vector p - origin    
@@ -247,9 +247,9 @@ def WindingNumber (p, ListSurfacePoints):
 
 #Return the distance between two points
 def calculateDistance(p, centralPoint):
-    if not isinstance(p, ndarray):
+    if not isinstance(p, np.ndarray):
         p = np.array(p)
-    if not isinstance(centralPoint, ndarray):
+    if not isinstance(centralPoint, np.ndarray):
         centralPoint = np.array(centralPoint)
     v = p - centralPoint
     dist = np.sqrt(v.dot(v))

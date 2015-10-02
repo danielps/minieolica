@@ -12,28 +12,40 @@ from osgeo import gdal
 from osgeo import gdal_array
 from osgeo import osr
 import numpy as np
+from numpy import nan
 import os.path
 import math
 import csv
 from osgeo.gdalconst import *
+import time
 
  
 # Find the different information (translation, rotation and scalefactor) needed to change pixels to coordinates 
 def rasterToCoordinatesIni():
-    global transMatrix, transVector, scaleFactor, originPointPixel, originPointCoord
+    global transMatrix, transVector, scaleFactor, originPointCoord
     #Initial coordinates of 2 points (lower and lefter points: 1 and 2)
     print 'Calculating the needed information (translation, rotation and scalefactor) to change coordinates-raster to pixel-velocity'
-    P0 = [ 129515.0, -29683.0 ]
-    P1 = [ 134406.6, -28823.2]
-    P2 = [ 135770.0, -14263.0 ]
-            
-    p0 = {  'x': 928271.0,
-            'y': 4587398.0  }
-    p1 = {  'x': 932813.15,
-            'y': 4588862.0  }
-    p2 = {  'x': 933208.0,
-            'y': 4603698.2  } 
-            
+    #p0 = [ 129515.0, -29683.0 ]
+    #p1 = [ 134406.6, -28823.2]
+    #p2 = [ 135770.0, -14263.0 ]
+    P0 = [ 932813.15, 4588862.0]
+    P1 = [ 932582.8, 4596499.2]
+    P2 = [ 935856.9, 4596854.3 ]
+    P3 = [ 933208.0, 4603698.2 ]
+    #P0 = {  'x': 928271.0,
+    #        'y': 4587398.0  }
+    #P1 = {  'x': 932813.15,
+    #        'y': 4588862.0  }
+    #P2 = {  'x': 933208.0,
+    #        'y': 4603698.2  } 
+    p0 = {  'x': 134406.6,
+            'y': -28823.2  }
+    p1 = {  'x': 134712.0,
+            'y': -21327.0  }
+    p2 = {  'x': 137933.5,
+            'y': -21188.7  } 
+    p3 = {  'x': 135770.0,
+            'y': -14263.0  }            
 
     #Calculate de translation vector, P1 - T = p1            
     Tx = P1[0] - p1['x']
@@ -59,10 +71,11 @@ def rasterToCoordinatesIni():
     #Calculate the rotation matrix (P)* [(cos,-sin),(sin,cos)] = (p)
     res = np.array([[coseno,-seno],[seno,coseno]])
     transMatrix = np.linalg.inv(res)
+    #transMatrix = array([[1.0, 0.0], [0.0, 1.0]])
     
     #Calculate the scale factor, and the origin point to apply the scaling
     scaleFactor = mod_V / mod_v
-    originPointPixel = np.array(P1)
+    #scaleFactor = 1
     originPointCoord = np.array([p1['x'],p1['y']])
     
 
@@ -72,12 +85,12 @@ def rasterToCoordinates(p):
     #p = [129668,-29854]
     #p = [135757,-14281]
     #Change the point to an array
-    if not isinstance(p, ndarray):
+    if not isinstance(p, np.ndarray):
         p = np.array(p)
     
     #Find the vector p - origin    
     v = np.array(p) - np.array(originPointCoord)
-    
+    print v
     #Calculate the module
     mod_v = np.sqrt(v.dot(v))
     
@@ -119,10 +132,6 @@ def readInitialMap(filename='Predios_bcn_ETRS89.srl'):
                 coordinates = coordinates.split('|')[0:-1]
                 #print 'coor: ', coordinates
                 newCoor = [[float(coordinates[n]), float(coordinates[n+1])] for n in xrange(0,len(coordinates),2)]
-                #coor = [[float(coordinates[n]), float(coordinates[n+1])] for n in xrange(0,len(coordinates),2)]
-                #newCoor = readInitialMapCheckPoints(coor)
-                #if len(coor) > len(newCoor): print 'removed from parcel: %s %s of %s' % (parcelId,len(newCoor),len(coor))
-                #print 'coor new: ', newCoor
                 center = np.mean(newCoor, axis=0)
                 min_xy = np.min(newCoor, axis=0)
                 max_xy = np.max(newCoor, axis=0)
@@ -139,27 +148,45 @@ def readInitialMap(filename='Predios_bcn_ETRS89.srl'):
                 RiskueId = line.rstrip().split('|')[-1]
                 #print 'parcel: ', parcelId
                 #print 'riskue: ', RiskueId
-                if RiskueId != 0 :
+                if RiskueId != '0' :
+                    newCoor = readInitialMapCheckPoints(newCoor)
                     cartographicMapArray.append([parcelId,RiskueId,newCoor,center.tolist(),square])
             #if i > 3: break
     else: 
         print 'file %s does not exist' % str(path_cad + filename)      
 
 
-#Checking the list of point and return only the needed points (to avoid points closer to another)
+#Checking the list of point and return only the needed points (to avoid points closer to another or points over the same line)
 def readInitialMapCheckPoints(listPoints):
-    newListPoints = listPoints
-    for i in listPoints:
-        for j in listPoints:
-            print i, ' ', j, ' ', calculateDistance(i,j)
-            if i != j and calculateDistance(i,j) < 2.0:
-                print 'removed point: %s' % j
-                newListPoints.remove(j)
-    return newListPoints
-    
+    import copy
+    # Eliminate the points over the same line
+    newListPoints = copy.deepcopy(listPoints)
+    for i in range(0,len(listPoints)-2):     
+        area = triangleArea(listPoints[i], listPoints[i+1], listPoints[i+2])
+        #print listPoints[i], listPoints[i+1], listPoints[i+2], area
+        if abs(area) < 1e-1:
+            #print 'remove 2 ', listPoints[i+1]
+            newListPoints.remove(listPoints[i+1])
+    #print newListPoints
+    #Eliminate the points that are closer
+    newListPoints2 = copy.deepcopy(newListPoints)
+    for i in newListPoints2:
+        for j in newListPoints2:
+            #print i, ' ', j#, ' ', calculateDistance(i,j)
+            if i != j and calculateDistance(i,j) < 5.0:
+                #print 'removed point: %s' % j
+                newListPoints2.remove(j)
+    # To ensure that the polygon is closed
+    if newListPoints2[0] != newListPoints2[-1]:
+        newListPoints2.append(newListPoints2[0])
+    #print newListPoints2
+    if len(newListPoints2) >=5 :
+        return newListPoints2   
+    else:
+        return listPoints
 
 # Reading geometry data from the raster file (values are stored in a matrix called geoArray)
-def readRasterData(file = 'barcelona_raster_augusto_500x400.asc'):
+def readRasterData(file = 'barcelona_raster_augusto_500x400 v2.asc'):
     global geoArray, top_left_x, resolution_x, top_left_y, resolution_y
     #initial variables
     path_geo = '/home/daniel/Documentos/Ofertes/Recurs Eolic/Estudi/Geo Raster/'
@@ -173,6 +200,7 @@ def readRasterData(file = 'barcelona_raster_augusto_500x400.asc'):
         rows = src_ds.RasterYSize
         NoDataValue = srcband.GetNoDataValue()
         geoTransform = src_ds.GetGeoTransform()
+        #print geoTransform
         top_left_x = geoTransform[0] # top left x 
         resolution_x = geoTransform[1] # w-e resolution 
         top_left_y = geoTransform[3] # top left y
@@ -231,11 +259,24 @@ def WindingNumber (p, ListSurfacePoints):
     return totalAngle
 
 
+#Calculate the triangle area
+def triangleArea (p, p1, p2):
+    qx = p[0]
+    qy = p[1] 
+    cx_p1 = p1[0]
+    cy_p1 = p1[1]
+    cx_p2 = p2[0]
+    cy_p2 = p2[1] 
+    # Calculo el area del triangulo que forman los 3 puntos
+    area = qx*cy_p1 - qy*cx_p1 + qy*cx_p2 - qx*cy_p2 + cx_p1*cy_p2 - cy_p1*cx_p2         
+    return area
+
+
 #Return the distance between two points
 def calculateDistance(p, centralPoint):
-    if not isinstance(p, ndarray):
+    if not isinstance(p, np.ndarray):
         p = np.array(p)
-    if not isinstance(centralPoint, ndarray):
+    if not isinstance(centralPoint, np.ndarray):
         centralPoint = np.array(centralPoint)
     v = p - centralPoint
     dist = np.sqrt(v.dot(v))
@@ -259,6 +300,8 @@ def calculateRasterInsideCartographic():
     rasterCoordArray = np.array(rasterCoordArray)    
 
     print('Calculating the raster points inside cartographic')
+    width_01 = int(dim_Y*0.01)
+    width_05 = int(dim_Y*0.05)
     width_10 = int(dim_Y*0.1)
     width_20 = int(dim_Y*0.2)
     width_30 = int(dim_Y*0.3)
@@ -270,14 +313,16 @@ def calculateRasterInsideCartographic():
     width_90 = int(dim_Y*0.9)
     width_100 = int(dim_Y-1)
     minDistance = 1500
+    t0 = time.time()
     for y in np.arange(dim_Y):
         for x in np.arange(dim_X):
             #print x, ' ', y
             # Find the edges of the square in Coord and
             p = rasterCoordArray[x][y]
-            #print p
+            print p
             #then transform it into UTM coordinates
             p = rasterToCoordinates(p)   
+            print p
             #p = [932952.591045, 4601664.363319]
             #p = [932814, 4601531]
             #and then I look for the inside points and points over the edges using the windingNumber
@@ -298,17 +343,44 @@ def calculateRasterInsideCartographic():
                             else: 
                                 ini.append([cartographicMapArray[i][0],cartographicMapArray[i][1]])
                                 rasterInsideCartographicArray[x][y] = ini
-            #print rasterInsideCartographicArray[x][y]            
-        if (y == width_10) : print '10% done'
-        if (y == width_20) : print '20% done'
-        if (y == width_30) : print '30% done'
-        if (y == width_40) : print '40% done'
-        if (y == width_50) : print '50% done'
-        if (y == width_60) : print '60% done'
-        if (y == width_70) : print '70% done'
-        if (y == width_80) : print '80% done'
-        if (y == width_90) : print '90% done'
-        if (y == width_100): print '100% done'
+            print rasterInsideCartographicArray[x][y]            
+        if (y == width_01) : 
+            print '1%% done in %s seconds' % str(round(time.time()-t0,0))
+            t0 = time.time()
+            break
+        if (y == width_05) : 
+            print '5%% done in %s seconds' % str(round(time.time()-t0,0))
+            t0 = time.time()
+        if (y == width_10) : 
+            print '10%% donein %s seconds' % str(round(time.time()-t0,0))
+            t0 = time.time()
+        if (y == width_20) : 
+            print '20%% done in %s seconds' % str(round(time.time()-t0,0))
+            t0 = time.time()
+        if (y == width_30) : 
+            print '30%% done in %s seconds' % str(round(time.time()-t0,0))
+            t0 = time.time()
+        if (y == width_40) : 
+            print '40%% done in %s seconds' % str(round(time.time()-t0,0))
+            t0 = time.time()
+        if (y == width_50) : 
+            print '50%% done in %s seconds' % str(round(time.time()-t0,0))
+            t0 = time.time()
+        if (y == width_60) :
+            print '60%% done in %s seconds' % str(round(time.time()-t0,0))
+            t0 = time.time()
+        if (y == width_70) : 
+            print '70%% done in %s seconds' % str(round(time.time()-t0,0))
+            t0 = time.time()
+        if (y == width_80) : 
+            print '80%% done in %s seconds' % str(round(time.time()-t0,0))
+            t0 = time.time()
+        if (y == width_90) : 
+            print '90%% done in %s seconds' % str(round(time.time()-t0,0))
+            t0 = time.time()
+        if (y == width_100): 
+            print '100%% done in %s seconds' % str(round(time.time()-t0,0))
+            t0 = time.time()
         
     print('Saving the info cartographic into file')
     path_geo = '/home/daniel/Documentos/Ofertes/Recurs Eolic/Estudi/Geo Raster/'
