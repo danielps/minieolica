@@ -43,10 +43,10 @@ def readRasterData(file = 'barcelona_raster_augusto_500x400 v2.asc'):
         top_left_y = geoTransform[3] # top left y
         resolution_y = geoTransform[5] # n-s resolution 
         geoArray = srcband.ReadAsArray(0, 0, cols, rows)
-        # Considering the initial_height
-        geoArray = geoArray - ini_height
         # Changing NoDataValue into dataArray to nan
         geoArray[geoArray == NoDataValue] = nan
+        # Considering the initial_height
+        geoArray = geoArray - ini_height
     else:
         print 'file %s does not exist' % str(path_geo + file)
 
@@ -59,7 +59,8 @@ def modifyRasterFile(file = 'barcelona_raster_augusto_500x400 v3.asc'):
     if not os.path.isfile(path_geo + file):
         print('Calculating the coordinates of the raster file')
         dim_X , dim_Y = geoArray.shape
-        #rasterNewZValues = np.nan((dim_X,dim_Y), dtype=object) 
+        rasterNewZValues = np.empty((dim_X,dim_Y), dtype=object) 
+        rasterNewZValues[:] = np.nan
         rasterCoordArray = []
         for y in np.arange(top_left_y, top_left_y+resolution_y*dim_Y, resolution_y):
             row_list = []
@@ -75,14 +76,14 @@ def modifyRasterFile(file = 'barcelona_raster_augusto_500x400 v3.asc'):
                 print p, new_p
                 new_p = [922098.7312161 , 4604435.92692865]
                 # find the Square that contains the new point
-                listPoints_y =  np.arange(top_left_y, top_left_y+resolution_y*dim_Y, resolution_y)
+                listPoints_y = np.arange(top_left_y, top_left_y+resolution_y*dim_Y, resolution_y)
                 listPoints_y = listPoints_y.tolist()
                 listPoints_y.append(new_p[1])
                 listPoints_y.sort()
                 new_p_y_position = listPoints_y.index(new_p[1])
                 y0 = listPoints_y[new_p_y_position-1] if new_p_y_position > 0 else nan
                 y1 = listPoints_y[new_p_y_position+1] if new_p_y_position < dim_Y else nan
-                listPoints_x =  np.arange(top_left_x, top_left_x+resolution_x*dim_X, resolution_x)
+                listPoints_x = np.arange(top_left_x, top_left_x+resolution_x*dim_X, resolution_x)
                 listPoints_x = listPoints_x.tolist()
                 listPoints_x.append(new_p[0])
                 listPoints_x.sort()
@@ -91,8 +92,40 @@ def modifyRasterFile(file = 'barcelona_raster_augusto_500x400 v3.asc'):
                 x1 = listPoints_x[new_p_x_position+1] if new_p_x_position < dim_X else nan
                 square = [[x0,y0],[x0,y1],[x1,y1],[x1,y0]]
                 print square
-                #Calculating the new z value
-                
+                #Calculating the weigth of the points of the square
+                dist = []
+                for point in square:
+                    v = np.array(new_p) - np.array(point)
+                    d = np.sqrt(v.dot(v))
+                    dist.append(d)
+                dist = np.array(dist)
+                mdist = np.ma.masked_array(dist,np.isnan(dist))
+                mdistSum = np.sum(mdist)
+                weigth = dist / mdistSum
+                #print weigth
+                #Calculating the new z
+                listPoints_y = np.arange(top_left_y, top_left_y+resolution_y*dim_Y, resolution_y)  
+                listPoints_y = listPoints_y.tolist()
+                listPoints_x = np.arange(top_left_x, top_left_x+resolution_x*dim_X, resolution_x)
+                listPoints_x = listPoints_x.tolist()
+                list_z = []
+                for point in square:
+                    p_y_position = listPoints_y.index(point[1]) if point[1] is not nan else nan
+                    p_x_position = listPoints_x.index(point[0]) if point[0] is not nan else nan
+                    if point[1] is not nan and point[0] is not nan:
+                        new_z = geoArray[p_x_position][p_y_position]
+                    else:
+                        new_z = np.nan
+                    list_z.append(new_z)
+                #print list_z
+                list_z = np.array(list_z)
+                z_weigth = list_z * weigth
+                print z_weigth
+                mZ = np.ma.masked_array(z_weigth,np.isnan(z_weigth))
+                print mZ
+                mZSum = np.sum(mZ)
+                print mZSum
+                rasterNewZValues[x][y] = mZSum
                 break
             break
     else:    
