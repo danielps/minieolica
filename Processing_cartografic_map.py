@@ -185,6 +185,35 @@ def readInitialMapCheckPoints(listPoints):
     else:
         return listPoints
 
+
+#Creating a region where the different parcels will be included
+def readInitialMapRegionClassified():
+    global cartographicMapRegion
+
+    dim_X , dim_Y = geoArray.shape
+    n_elements = 10
+    list_y = np.arange(top_left_y, top_left_y+resolution_y*dim_Y, dim_Y/n_elements)
+    list_x = np.arange(top_left_x, top_left_x+resolution_x*dim_X, dim_X/n_elements)
+    cartographicMapRegion = np.zeros((n_elements,n_elements), dtype=object)            
+    for y in range(1,len(list_y)):
+        y_0 = list_y[y-1]
+        y_1 = list_y[y]
+        for x in range(1,len(list_x)):
+            x_0 = list_x[x-1]
+            x_1 = list_x[x]
+            parcel_inside = []
+            square = [[x_0,y_0],[x_0,y_1],[x_1,y_1],[x_1,y_0],[x_0,y_0]]
+            for parcel in cartographicMapArray:
+                square_to_check = parcel[4]
+                for point in square_to_check:
+                    isInsideSquare = WindingNumber(point, square)
+                    if abs(isInsideSquare) > 5e-2:
+                        parcel_inside.append(parcel[0])
+                        break
+            cartographicMapRegion[x-1][y-1] = parcel_inside
+
+        
+        
 # Reading geometry data from the raster file (values are stored in a matrix called geoArray)
 def readRasterData(file = 'barcelona_raster_augusto_500x400 v2.asc'):
     global geoArray, top_left_x, resolution_x, top_left_y, resolution_y
@@ -397,8 +426,9 @@ def calculateRasterInsideCartographic():
 """ Main Code """
 rasterToCoordinatesIni()
 readInitialMap()
-readRasterData()
-calculateRasterInsideCartographic()
+readRasterData(file = 'barcelona_raster_augusto_3000x3000 v7.asc')
+readInitialMapRegionClassified()
+#calculateRasterInsideCartographic()
 
 
 """

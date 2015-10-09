@@ -9,16 +9,14 @@ i quin tipus
 """
 # Libraries
 from osgeo import gdal
-from osgeo import gdal_array
-from osgeo import osr
 import numpy as np
 from numpy import nan
+from numpy import isnan
 import os.path
 import math
 import csv
-from osgeo.gdalconst import *
 import time
-
+import copy
  
 
 
@@ -51,7 +49,7 @@ def readRasterData(file = 'barcelona_raster_augusto_500x400 v2.asc'):
         print 'file %s does not exist' % str(path_geo + file)
 
 
-def modifyRasterFile(file = 'barcelona_raster_augusto_500x400 v3.asc'):
+def modifyRasterFile(file = 'barcelona_raster_augusto_500x400 v4.asc'):
     path_geo = '/home/daniel/Documentos/Ofertes/Recurs Eolic/Estudi/Geo Raster/'
     #path_geo = '/home/xcipriano/Escriptori/MiniEolica/Geo Raster/'
     print('Calculating the new raster file')
@@ -59,7 +57,7 @@ def modifyRasterFile(file = 'barcelona_raster_augusto_500x400 v3.asc'):
     if not os.path.isfile(path_geo + file):
         print('Calculating the coordinates of the raster file')
         dim_X , dim_Y = geoArray.shape
-        rasterNewZValues = np.empty((dim_X,dim_Y), dtype=object) 
+        rasterNewZValues = np.empty((dim_X,dim_Y)) 
         rasterNewZValues[:] = np.nan
         rasterCoordArray = []
         for y in np.arange(top_left_y, top_left_y+resolution_y*dim_Y, resolution_y):
@@ -68,66 +66,130 @@ def modifyRasterFile(file = 'barcelona_raster_augusto_500x400 v3.asc'):
                 row_list.append((x, y))
             rasterCoordArray.append(row_list) 
         rasterCoordArray = np.array(rasterCoordArray)    
-        print('')
+        print('Calculating the new position and new z')
+        width_01 = int(dim_Y*0.01)
+        width_05 = int(dim_Y*0.05)
+        width_10 = int(dim_Y*0.1)
+        width_20 = int(dim_Y*0.2)
+        width_30 = int(dim_Y*0.3)
+        width_40 = int(dim_Y*0.4) 
+        width_50 = int(dim_Y*0.5)
+        width_60 = int(dim_Y*0.6)
+        width_70 = int(dim_Y*0.7)
+        width_80 = int(dim_Y*0.8)
+        width_90 = int(dim_Y*0.9)
+        width_100 = int(dim_Y-1)
+        t0 = time.time()
+        listPoints_y = np.arange(top_left_y, top_left_y+resolution_y*dim_Y, resolution_y)  
+        listPoints_y = listPoints_y.tolist()
+        listPoints_x = np.arange(top_left_x, top_left_x+resolution_x*dim_X, resolution_x)
+        listPoints_x = listPoints_x.tolist()
         for y in np.arange(dim_Y):
             for x in np.arange(dim_X):
-                p = rasterCoordArray[x][y]
+                p = rasterCoordArray[y][x]
                 new_p = modifyRasterPoint(p)
-                print p, new_p
-                new_p = [922098.7312161 , 4604435.92692865]
+                #print p, new_p
+                #new_p = [922098.7312161 , 4604435.92692865]
                 # find the Square that contains the new point
-                listPoints_y = np.arange(top_left_y, top_left_y+resolution_y*dim_Y, resolution_y)
-                listPoints_y = listPoints_y.tolist()
-                listPoints_y.append(new_p[1])
-                listPoints_y.sort()
-                new_p_y_position = listPoints_y.index(new_p[1])
-                y0 = listPoints_y[new_p_y_position-1] if new_p_y_position > 0 else nan
-                y1 = listPoints_y[new_p_y_position+1] if new_p_y_position < dim_Y else nan
-                listPoints_x = np.arange(top_left_x, top_left_x+resolution_x*dim_X, resolution_x)
-                listPoints_x = listPoints_x.tolist()
-                listPoints_x.append(new_p[0])
-                listPoints_x.sort()
-                new_p_x_position = listPoints_x.index(new_p[0])
-                x0 = listPoints_x[new_p_x_position-1] if new_p_x_position > 0 else nan
-                x1 = listPoints_x[new_p_x_position+1] if new_p_x_position < dim_X else nan
+                listPoints_y0 = copy.copy(listPoints_y)
+                listPoints_y0.append(new_p[1])
+                listPoints_y0.sort()
+                new_p_y_position = listPoints_y0.index(new_p[1])
+                y0 = listPoints_y0[new_p_y_position-1] if new_p_y_position > 0 else nan
+                y1 = listPoints_y0[new_p_y_position+1] if new_p_y_position < dim_Y else nan
+                listPoints_x0 = copy.copy(listPoints_x)
+                listPoints_x0.append(new_p[0])
+                listPoints_x0.sort()
+                new_p_x_position = listPoints_x0.index(new_p[0])
+                x0 = listPoints_x0[new_p_x_position-1] if new_p_x_position > 0 else nan
+                x1 = listPoints_x0[new_p_x_position+1] if new_p_x_position < dim_X else nan
                 square = [[x0,y0],[x0,y1],[x1,y1],[x1,y0]]
-                print square
+                #print square
                 #Calculating the weigth of the points of the square
                 dist = []
                 for point in square:
                     v = np.array(new_p) - np.array(point)
                     d = np.sqrt(v.dot(v))
-                    dist.append(d)
+                    inv_dist = (1 / d) if d != 0 else 1e6
+                    dist.append(inv_dist)
                 dist = np.array(dist)
                 mdist = np.ma.masked_array(dist,np.isnan(dist))
                 mdistSum = np.sum(mdist)
                 weigth = dist / mdistSum
                 #print weigth
                 #Calculating the new z
-                listPoints_y = np.arange(top_left_y, top_left_y+resolution_y*dim_Y, resolution_y)  
-                listPoints_y = listPoints_y.tolist()
-                listPoints_x = np.arange(top_left_x, top_left_x+resolution_x*dim_X, resolution_x)
-                listPoints_x = listPoints_x.tolist()
                 list_z = []
                 for point in square:
-                    p_y_position = listPoints_y.index(point[1]) if point[1] is not nan else nan
-                    p_x_position = listPoints_x.index(point[0]) if point[0] is not nan else nan
                     if point[1] is not nan and point[0] is not nan:
-                        new_z = geoArray[p_x_position][p_y_position]
+                        p_y_position = listPoints_y.index(point[1]) 
+                        p_x_position = listPoints_x.index(point[0])
+                        if p_y_position < dim_Y and p_x_position < dim_X :
+                            #print p_x_position, p_y_position
+                            new_z = geoArray[p_y_position][p_x_position]
+                        else:
+                            new_z = np.nan
                     else:
                         new_z = np.nan
                     list_z.append(new_z)
                 #print list_z
                 list_z = np.array(list_z)
                 z_weigth = list_z * weigth
-                print z_weigth
+                #print z_weigth
                 mZ = np.ma.masked_array(z_weigth,np.isnan(z_weigth))
-                print mZ
+                #print mZ
                 mZSum = np.sum(mZ)
-                print mZSum
-                rasterNewZValues[x][y] = mZSum
-                break
-            break
+                #print mZSum
+                rasterNewZValues[y][x] = mZSum
+                #break
+            if (y == width_01) : 
+                print '1%% done in %s seconds' % str(round(time.time()-t0,0))
+                t0 = time.time()
+            if (y == width_05) : 
+                print '5%% done in %s seconds' % str(round(time.time()-t0,0))
+                t0 = time.time()
+            if (y == width_10) : 
+                print '10%% done in %s seconds' % str(round(time.time()-t0,0))
+                t0 = time.time()
+            if (y == width_20) : 
+                print '20%% done in %s seconds' % str(round(time.time()-t0,0))
+                t0 = time.time()
+            if (y == width_30) : 
+                print '30%% done in %s seconds' % str(round(time.time()-t0,0))
+                t0 = time.time()
+            if (y == width_40) : 
+                print '40%% done in %s seconds' % str(round(time.time()-t0,0))
+                t0 = time.time()
+            if (y == width_50) : 
+                print '50%% done in %s seconds' % str(round(time.time()-t0,0))
+                t0 = time.time()
+            if (y == width_60) :
+                print '60%% done in %s seconds' % str(round(time.time()-t0,0))
+                t0 = time.time()
+            if (y == width_70) : 
+                print '70%% done in %s seconds' % str(round(time.time()-t0,0))
+                t0 = time.time()
+            if (y == width_80) : 
+                print '80%% done in %s seconds' % str(round(time.time()-t0,0))
+                t0 = time.time()
+            if (y == width_90) : 
+                print '90%% done in %s seconds' % str(round(time.time()-t0,0))
+                t0 = time.time()
+            if (y == width_100): 
+                print '100%% done in %s seconds' % str(round(time.time()-t0,0))
+                t0 = time.time()
+        print('Saving the new raster file')
+        fl = open(path_geo + file, 'w')
+        fl.write('NCOLS %s \n' %dim_X)
+        fl.write('NROWS %s \n' %dim_Y)
+        fl.write('XLLCORNER %s \n' %top_left_x)
+        fl.write('YLLCORNER %s \n' %(top_left_y+resolution_y*dim_Y))
+        fl.write('CELLSIZE %s \n' %resolution_x)
+        fl.write('NODATA_VALUE -9999 \n')
+        rasterNewZValues[np.isnan(rasterNewZValues)] = int(-9999)
+        writer = csv.writer(fl, delimiter=' ')
+        for values in rasterNewZValues:
+            writer.writerow(values)
+        fl.close()    
     else:    
         print 'file %s already exists' % str(path_geo + file)
 
@@ -136,10 +198,14 @@ def modifyRasterFile(file = 'barcelona_raster_augusto_500x400 v3.asc'):
 # Coordinates to pixels
 def modifyRasterPoint(p):
     #Ini variables
-    ang = 3.8*math.pi/180.0    
-    origin_xy = [933208, 4603698]    
-    scale = 1
-    translationVector=[0,0]
+    # This ini variables were used to make a first modification
+    #ang = 3.8*math.pi/180.0 
+    #origin_xy = [933208, 4603698]  
+    #This second is needed to full fill the transformation
+    ang = 0.2*math.pi/180.0 
+    origin_xy = [931624, 4596432] 
+    #scale = 1
+    #translationVector=[0,0]
     
     #Change the point to an array
     if not isinstance(p, np.ndarray):
@@ -149,40 +215,30 @@ def modifyRasterPoint(p):
     v = np.array(p) - np.array(origin_xy)
     
     #Calculate the module
-    mod_v = np.sqrt(v.dot(v))
+#    mod_v = np.sqrt(v.dot(v))
     
     #Applying the rotation matrix
-    transfMatrix = np.array([[cos(ang),sin(ang)],[-sin(ang),cos(ang)]])
+    transfMatrix = np.array([[math.cos(ang),math.sin(ang)],[-math.sin(ang),math.cos(ang)]])
     v_rotated =  transfMatrix.dot(v)
     
     #Applying the scale factor
-    if mod_v != 0 :
-        mod_scaled_v = v_rotated * scale
-    else:
-        mod_scaled_v = v_rotated
+#    if mod_v != 0 :
+#        mod_scaled_v = v_rotated * scale
+#    else:
+#        mod_scaled_v = v_rotated
     
     #The scaled point
-    mod_scaled_p = mod_scaled_v + origin_xy
+#    mod_scaled_p = mod_scaled_v + origin_xy
     
     #Applying the translation            
-    p_new = mod_scaled_p + translationVector
+#    p_new = mod_scaled_p + translationVector
 
+    p_new = v_rotated + origin_xy
+    
     #Return the new value
     return p_new    
 
 
-
-#Calculate the triangle area
-def triangleArea (p, p1, p2):
-    qx = p[0]
-    qy = p[1] 
-    cx_p1 = p1[0]
-    cy_p1 = p1[1]
-    cx_p2 = p2[0]
-    cy_p2 = p2[1] 
-    # Calculo el area del triangulo que forman los 3 puntos
-    area = qx*cy_p1 - qy*cx_p1 + qy*cx_p2 - qx*cy_p2 + cx_p1*cy_p2 - cy_p1*cx_p2         
-    return area
 
 
 #Return the distance between two points
@@ -202,19 +258,7 @@ def calculateDistance(p, centralPoint):
     
 
 """ Main Code """
-readRasterData()
-modifyRasterFile()
+readRasterData(file = 'barcelona_raster_augusto_3000x3000 v8.asc')
+modifyRasterFile(file = 'barcelona_raster_augusto_3000x3000 v9.asc')
 
 
-
-"""
-# Create a jpeg file with the new interpolated velocity 
-from osgeo import gdalnumeric
-meshMeanVelArrayInteger = meshMeanVelArray.astype(gdalnumeric.uint8)
-gdalnumeric.SaveArray(meshMeanVelArrayInteger, "/home/daniel/Documentos/Ofertes/Recurs Eolic/Estudi/vel2.jpeg", format='JPEG')
-m_x = meshPixelArray[0:10,0:10,0]
-m_y = meshPixelArray[0:10,0:10,1]
-m_x.tofile("/home/daniel/Documentos/Ofertes/Recurs Eolic/Estudi/x_points.csv", sep=";")
-m_y.tofile("/home/daniel/Documentos/Ofertes/Recurs Eolic/Estudi/y_points.csv", sep=";")
-meshMeanVelArray.tofile("/home/daniel/Documentos/Ofertes/Recurs Eolic/Estudi/vel_points.csv", sep=";")
-"""
