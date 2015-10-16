@@ -44,12 +44,13 @@ def readRasterData(file = 'barcelona_raster_augusto_500x400 v2.asc'):
         # Changing NoDataValue into dataArray to nan
         geoArray[geoArray == NoDataValue] = nan
         # Considering the initial_height
-        geoArray = geoArray - ini_height
+        #geoArray = geoArray - ini_height
     else:
         print 'file %s does not exist' % str(path_geo + file)
 
 
-def modifyRasterFile(file = 'barcelona_raster_augusto_500x400 v4.asc'):
+def modifyRasterFile(file = 'barcelona_raster_augusto_500x400 v5.asc'):
+    #global rasterNewZValues
     path_geo = '/home/daniel/Documentos/Ofertes/Recurs Eolic/Estudi/Geo Raster/'
     #path_geo = '/home/xcipriano/Escriptori/MiniEolica/Geo Raster/'
     print('Calculating the new raster file')
@@ -140,7 +141,7 @@ def modifyRasterFile(file = 'barcelona_raster_augusto_500x400 v4.asc'):
                 mZSum = np.sum(mZ)
                 #print mZSum
                 rasterNewZValues[y][x] = mZSum
-                #break
+                break
             if (y == width_01) : 
                 print '1%% done in %s seconds' % str(round(time.time()-t0,0))
                 t0 = time.time()
@@ -259,6 +260,6 @@ def calculateDistance(p, centralPoint):
 
 """ Main Code """
 readRasterData(file = 'barcelona_raster_augusto_3000x3000 v8.asc')
-modifyRasterFile(file = 'barcelona_raster_augusto_3000x3000 v9.asc')
+modifyRasterFile(file = 'barcelona_raster_augusto_3000x3000 v10.asc')
 
 
