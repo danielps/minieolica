@@ -12,7 +12,6 @@ from osgeo import osr
 import numpy as np
 import os.path
 import math
-from osgeo.gdalconst import *
 
 
 # Find the different information (translation, rotation and scalefactor) needed to change pixels to coordinates 
@@ -20,11 +19,15 @@ def pixelsToCoordinatesIni(P1,P2):
     global transMatrix, transVector, scaleFactor, originPointPixel, originPointCoord
     #Initial coordinates of 2 points (lower and lefter points: 1 and 2)
     print 'Calculating the needed information (translation, rotation and scalefactor) to change coordinates-raster to pixel-velocity'
-    p1 = {  'x': 129515.0,
-            'y': -29683.0   }
-    p2 = {  'x': 135770.0,
-            'y': -14263.0   }           
+    #p1 = {  'x': 129515.0,
+    #        'y': -29683.0   }
+    #p2 = {  'x': 135770.0,
+    #        'y': -14263.0   }           
 
+    p1 = {  'x': 928133.272888,
+            'y': 4587378.29794  }
+    p2 = {  'x': 933192.459425,
+            'y': 4603732.11196 }
     #Calculate de translation vector, P1 - T = p1            
     Tx = P1[0] - p1['x']
     Ty = P1[1] - p1['y']
@@ -173,7 +176,7 @@ def readRasterData(file = 'barcelona_raster_augusto_500x400.asc'):
         # Considering the initial_height
         geoArray = geoArray - ini_height
         # Changing NoDataValue into dataArray to nan
-        geoArray[geoArray == NoDataValue] = nan
+        geoArray[geoArray == NoDataValue] = np.nan
         #How to calculate the mean excluding nan values
         #mdat = np.ma.masked_array(geoArray[1,],np.isnan(geoArray[1,]))
         #mm = np.mean(mdat)
@@ -268,16 +271,9 @@ def calculateMeanVel():
     minDistance_V = coordinatesToPixels(meshCoordArray[0][0])-coordinatesToPixels(meshCoordArray[1][0])
     minDistance = np.sqrt(minDistance_V.dot(minDistance_V)) * 0.5
     meshMeanVelArray = np.empty((dim_X,dim_Y), dtype='f') 
-    width_10 = int(dim_Y*0.1)
-    width_20 = int(dim_Y*0.2)
-    width_30 = int(dim_Y*0.3)
-    width_40 = int(dim_Y*0.4) 
-    width_50 = int(dim_Y*0.5)
-    width_60 = int(dim_Y*0.6)
-    width_70 = int(dim_Y*0.7)
-    width_80 = int(dim_Y*0.8)
-    width_90 = int(dim_Y*0.9)
-    width_100 = int(dim_Y-1)
+    intervalPercentage = 10
+    listPercentage = [int(dim_Y*x/100.0) for x in range(0,101,intervalPercentage)]
+    t0 = time.time()
     for y in np.arange(dim_Y):
         for x in np.arange(dim_X):
             # Find the edges of the square in Coord and
@@ -325,16 +321,9 @@ def calculateMeanVel():
                         if distance <= minDistance:
                             pointVelocity.append(vel)
             meshMeanVelArray[x][y] = mean(pointVelocity)
-        if (y == width_10) : print '10% done'
-        if (y == width_20) : print '20% done'
-        if (y == width_30) : print '30% done'
-        if (y == width_40) : print '40% done'
-        if (y == width_50) : print '50% done'
-        if (y == width_60) : print '60% done'
-        if (y == width_70) : print '70% done'
-        if (y == width_80) : print '80% done'
-        if (y == width_90) : print '90% done'
-        if (y == width_100): print '100% done'
+        if y in listPercentage:
+            print '%s%% done in %s seconds' % (str(y*100/dim_Y), str(round(time.time()-t0,0)))
+            t0 = time.time()
 
 
 
@@ -447,7 +436,7 @@ def CalculateRugosity(medheight, density):
     
 
 """ Main Code """
-readRasterData()
+readRasterData(file='barcelona_raster_augusto_3000x3000 v9.asc')
 readInitialVelocityData(vel_from = 0, vel_to = 1)
 pixelsToCoordinatesIni(edgePoints[0]['bottom-left'], edgePoints[0]['top-rigth'])
 createMesh(cols = 400, rows = 400)

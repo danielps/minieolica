@@ -68,18 +68,8 @@ def modifyRasterFile(file = 'barcelona_raster_augusto_500x400 v5.asc'):
             rasterCoordArray.append(row_list) 
         rasterCoordArray = np.array(rasterCoordArray)    
         print('Calculating the new position and new z')
-        width_01 = int(dim_Y*0.01)
-        width_05 = int(dim_Y*0.05)
-        width_10 = int(dim_Y*0.1)
-        width_20 = int(dim_Y*0.2)
-        width_30 = int(dim_Y*0.3)
-        width_40 = int(dim_Y*0.4) 
-        width_50 = int(dim_Y*0.5)
-        width_60 = int(dim_Y*0.6)
-        width_70 = int(dim_Y*0.7)
-        width_80 = int(dim_Y*0.8)
-        width_90 = int(dim_Y*0.9)
-        width_100 = int(dim_Y-1)
+        intervalPercentage = 5
+        listPercentage = [int(dim_Y*x/100.0) for x in range(0,101,intervalPercentage)]
         t0 = time.time()
         listPoints_y = np.arange(top_left_y, top_left_y+resolution_y*dim_Y, resolution_y)  
         listPoints_y = listPoints_y.tolist()
@@ -142,42 +132,10 @@ def modifyRasterFile(file = 'barcelona_raster_augusto_500x400 v5.asc'):
                 #print mZSum
                 rasterNewZValues[y][x] = mZSum
                 break
-            if (y == width_01) : 
-                print '1%% done in %s seconds' % str(round(time.time()-t0,0))
+            if y in listPercentage:
+                print '%s%% done in %s seconds' % (str(y*100/dim_Y), str(round(time.time()-t0,0)))
                 t0 = time.time()
-            if (y == width_05) : 
-                print '5%% done in %s seconds' % str(round(time.time()-t0,0))
-                t0 = time.time()
-            if (y == width_10) : 
-                print '10%% done in %s seconds' % str(round(time.time()-t0,0))
-                t0 = time.time()
-            if (y == width_20) : 
-                print '20%% done in %s seconds' % str(round(time.time()-t0,0))
-                t0 = time.time()
-            if (y == width_30) : 
-                print '30%% done in %s seconds' % str(round(time.time()-t0,0))
-                t0 = time.time()
-            if (y == width_40) : 
-                print '40%% done in %s seconds' % str(round(time.time()-t0,0))
-                t0 = time.time()
-            if (y == width_50) : 
-                print '50%% done in %s seconds' % str(round(time.time()-t0,0))
-                t0 = time.time()
-            if (y == width_60) :
-                print '60%% done in %s seconds' % str(round(time.time()-t0,0))
-                t0 = time.time()
-            if (y == width_70) : 
-                print '70%% done in %s seconds' % str(round(time.time()-t0,0))
-                t0 = time.time()
-            if (y == width_80) : 
-                print '80%% done in %s seconds' % str(round(time.time()-t0,0))
-                t0 = time.time()
-            if (y == width_90) : 
-                print '90%% done in %s seconds' % str(round(time.time()-t0,0))
-                t0 = time.time()
-            if (y == width_100): 
-                print '100%% done in %s seconds' % str(round(time.time()-t0,0))
-                t0 = time.time()
+
         print('Saving the new raster file')
         fl = open(path_geo + file, 'w')
         fl.write('NCOLS %s \n' %dim_X)
