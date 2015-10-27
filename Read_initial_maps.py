@@ -159,7 +159,7 @@ def readRasterData(file = 'barcelona_raster_augusto_500x400.asc'):
     global geoArray, top_left_x, resolution_x, top_left_y, resolution_y
     #initial variables
     path_geo = '/home/daniel/Documentos/Ofertes/Recurs Eolic/Estudi/Geo Raster/'
-    ini_height = 386   # Value needed because the raster file is displaced in z
+    #ini_height = 386   # Value needed because the raster file is displaced in z
     if os.path.isfile(path_geo + file):
         print 'Reading initial geometry from file %s' % file
         src_ds = gdal.Open(path_geo + file)
@@ -174,7 +174,7 @@ def readRasterData(file = 'barcelona_raster_augusto_500x400.asc'):
         resolution_y = geoTransform[5] # n-s resolution 
         geoArray = srcband.ReadAsArray(0, 0, cols, rows)
         # Considering the initial_height
-        geoArray = geoArray - ini_height
+        #geoArray = geoArray - ini_height
         # Changing NoDataValue into dataArray to nan
         geoArray[geoArray == NoDataValue] = np.nan
         #How to calculate the mean excluding nan values
@@ -185,8 +185,38 @@ def readRasterData(file = 'barcelona_raster_augusto_500x400.asc'):
         #mm3 = np.min(mdat)
         #mm4 = np.max(mdat)
     else:
-        print 'file %s does not exist' % str(path_geo + file)
+        print 'Reading initial geometry, file %s does not exist' % str(path_geo + file)
 
+#Reading parcel data from the raster file (values are stored in a matrix called parcelArray)
+def readRasterParcelData(file = 'raster_prova_new.asc'):
+    global parcelArray
+    #initial variables
+    path_geo = '/home/daniel/Documentos/Ofertes/Recurs Eolic/Estudi/Geo Raster/'
+    if os.path.isfile(path_geo + file):
+        print 'Reading initial parcel from file %s' % file
+        from numpy import genfromtxt
+        fr = open(path_geo + file, 'r')
+        cols = int(fr.readline().split(' ')[1])
+        rows = int(fr.readline().split(' ')[1])
+        top_left_x = float(fr.readline().split(' ')[1])
+        top_left_y = float(fr.readline().split(' ')[1])
+        resolution_x = float(fr.readline().split(' ')[1])
+        resolution_y = -resolution_x
+        top_left_y =   top_left_y + rows*resolution_x 
+        NoDataValue = int(fr.readline().split(' ')[1])
+        print cols, rows, top_left_x, top_left_y, resolution_x, resolution_y, NoDataValue
+        parcelArray = genfromtxt(path_geo + file, delimiter=' ',skip_header=6)
+        # Changing NoDataValue into dataArray to nan
+        parcelArray[parcelArray == NoDataValue] = np.nan
+    else:
+        print 'Reading initial parcel, file %s does not exist' % str(path_geo + file)
+   
+# C
+def calculateMeanParcelHeight():
+    #parcelArray[parcelArray == ]
+     
+     
+     
 # Create the mesh of point where the calculations will be done meshCoordArray
 def createMesh(cols = 400, rows = 400):
     # create a mesh over the raster geometry
@@ -206,47 +236,6 @@ def createMesh(cols = 400, rows = 400):
     
 
 
-# Calculating the solid angle of a point respect to one surface. If the solid angle is 0, that means that the
-# point is outside, if the value is 2PI the point is inside, and any other value the point is over one of the 
-# edges of the surface.
-def WindingNumber (p, ListSurfacePoints):
-    totalAngle = 0
-    qx = p[0]
-    qy = p[1]   
-    for i in range(1,len(ListSurfacePoints)):
-        p1 = ListSurfacePoints[i-1]
-        p2 = ListSurfacePoints[i]
-        cx_p1 = p1[0]
-        cy_p1 = p1[1]
-        cx_p2 = p2[0]
-        cy_p2 = p2[1]       
-        # vectors
-        u1 = qx - cx_p1
-        v1 = qy - cy_p1
-        u2 = qx - cx_p2
-        v2 = qy - cy_p2    	
-        # Calculating the producto escalar
-        mod = math.sqrt(pow(u1,2)+pow(v1,2)) * math.sqrt(pow(u2,2)+pow(v2,2))
-        if mod != 0:
-            prod_escalar = (u1*u2 + v1*v2) / mod
-            # To avoid rounding errors  
-            if prod_escalar > 1:
-                prod_escalar = 1
-            if prod_escalar < -1:
-                prod_escalar = -1            
-            # Calculo el signo del producto vectorial a través del area del triangulo que forman los 3 puntos
-            prod_vect = qx*cy_p1 - qy*cx_p1 + qy*cx_p2 - qx*cy_p2 + cx_p1*cy_p2 - cy_p1*cx_p2
-            # Calculo el ángulo
-            ang_sen = 0
-            ang_cos = math.acos(prod_escalar)
-            if prod_vect > 1e-6:
-                ang_sen = 1 
-            if prod_vect < -1e-6: 
-                ang_sen = -1
-
-        totalAngle = totalAngle + ang_cos*ang_sen
-         
-    return totalAngle
 
 #Return the distance between two points
 def calculateDistance(p, centralPoint):
@@ -307,16 +296,11 @@ def calculateMeanVel():
             if y_max > yMax: 
                 y_max = yMax
             #and then I look for the inside points and points over the edges using the windingNumber
-            #listSurfacePoints = [point_top_left_pixel,point_bot_left_pixel,point_bot_righ_pixel,point_top_righ_pixel]
             pointVelocity = []
             for px in np.arange(x_min,x_max,2):
                 for py in np.arange(y_min,y_max,2):
                     vel = velArray[px][py]
                     if np.isnan(vel) == False:
-                        #isInside = WindingNumber((px,py), listSurfacePoints)
-                        #if isInside != 0:
-                        #    pointInside.append((px,py))
-                        #    pointVelocity.append(vel)
                         distance = calculateDistance((px,py), central_point_pixel)
                         if distance <= minDistance:
                             pointVelocity.append(vel)
@@ -437,11 +421,12 @@ def CalculateRugosity(medheight, density):
 
 """ Main Code """
 readRasterData(file='barcelona_raster_augusto_3000x3000 v9.asc')
+readRasterParcelData(file = 'barcelona_raster_augusto_500x400.asc')
 readInitialVelocityData(vel_from = 0, vel_to = 1)
 pixelsToCoordinatesIni(edgePoints[0]['bottom-left'], edgePoints[0]['top-rigth'])
 createMesh(cols = 400, rows = 400)
 calculateMeanVel()
-
+calculateMeanParcelHeight()
 
 """
 # Create a jpeg file with the new interpolated velocity 
