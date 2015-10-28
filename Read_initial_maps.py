@@ -12,6 +12,7 @@ from osgeo import osr
 import numpy as np
 import os.path
 import math
+import time
 
 
 # Find the different information (translation, rotation and scalefactor) needed to change pixels to coordinates 
@@ -195,30 +196,26 @@ def readRasterParcelData(file = 'raster_prova_new.asc'):
     if os.path.isfile(path_geo + file):
         print 'Reading initial parcel from file %s' % file
         from numpy import genfromtxt
-        fr = open(path_geo + file, 'r')
-        cols = int(fr.readline().split(' ')[1])
-        rows = int(fr.readline().split(' ')[1])
-        top_left_x = float(fr.readline().split(' ')[1])
-        top_left_y = float(fr.readline().split(' ')[1])
-        resolution_x = float(fr.readline().split(' ')[1])
-        resolution_y = -resolution_x
-        top_left_y =   top_left_y + rows*resolution_x 
-        NoDataValue = int(fr.readline().split(' ')[1])
-        print cols, rows, top_left_x, top_left_y, resolution_x, resolution_y, NoDataValue
+        #fr = open(path_geo + file, 'r')
+        #cols = int(fr.readline().split(' ')[1])
+        #rows = int(fr.readline().split(' ')[1])
+        #top_left_x = float(fr.readline().split(' ')[1])
+        #top_left_y = float(fr.readline().split(' ')[1])
+        #resolution_x = float(fr.readline().split(' ')[1])
+        #resolution_y = -resolution_x
+        #top_left_y =   top_left_y + rows*resolution_x 
+        #NoDataValue = int(fr.readline().split(' ')[1])
+        #print cols, rows, top_left_x, top_left_y, resolution_x, resolution_y, NoDataValue
         parcelArray = genfromtxt(path_geo + file, delimiter=' ',skip_header=6)
         # Changing NoDataValue into dataArray to nan
-        parcelArray[parcelArray == NoDataValue] = np.nan
+        #parcelArray[parcelArray == NoDataValue] = np.nan
     else:
         print 'Reading initial parcel, file %s does not exist' % str(path_geo + file)
    
-# C
-def calculateMeanParcelHeight():
-    #parcelArray[parcelArray == ]
-     
-     
+    
      
 # Create the mesh of point where the calculations will be done meshCoordArray
-def createMesh(cols = 400, rows = 400):
+def createMesh(cols = 40, rows = 40):
     # create a mesh over the raster geometry
     global meshCoordArray, meshCoordArrayResolution_x, meshCoordArrayResolution_y
     print 'Creating mesh over Raster geometry'
@@ -226,9 +223,9 @@ def createMesh(cols = 400, rows = 400):
     meshCoordArrayResolution_x = resolution_x * dim_X / cols
     meshCoordArrayResolution_y = resolution_y * dim_Y / rows
     meshCoordArray = []
-    for y in np.arange(top_left_y+meshCoordArrayResolution_y/2.0,top_left_y+resolution_y*dim_Y, meshCoordArrayResolution_y):
+    for y in np.arange(top_left_y+meshCoordArrayResolution_y/2.0,-1+top_left_y+resolution_y*dim_Y, meshCoordArrayResolution_y):
         row_list = []
-        for x in np.arange(top_left_x+meshCoordArrayResolution_x/2.0, top_left_x+resolution_x*dim_X, meshCoordArrayResolution_x):
+        for x in np.arange(top_left_x+meshCoordArrayResolution_x/2.0, 1+top_left_x+resolution_x*dim_X, meshCoordArrayResolution_x):
             row_list.append((x, y))
         meshCoordArray.append(row_list) 
 
@@ -348,7 +345,35 @@ def writeVelRaster(file='0-1.tiff'):
                                                        # to the file
     output_raster.GetRasterBand(1).WriteArray(meshMeanVelArray)
     
-    
+
+# Given a reduced parcelArray and geoArray it returns a dictionary with the info of each parcel 
+def calculateParcelInfo(parcelArrayReduced, geoArrayReduced):
+    parcelList = np.unique(parcelArrayReduced).tolist()[1:] #list of parcels without 9999
+    parcelsInfo = {}
+    for parcel in parcelList:
+        heightList = geoArrayReduced[parcelArrayReduced == parcel]
+        n_elem = np.count_nonzero(~np.isnan(heightList))
+        max_val = np.nanmax(heightList)
+        min_val = np.nanmin(heightList)
+        mean_val = np.nanmean(heightList)
+        parcelsInfo[parcel] = {'mean': mean_val, 'max': max_val,'min': min_val, 'n_elem': n_elem}
+    return parcelsInfo
+
+
+# Given a reduced parcelArray and geoArray it returns a dictionary with the info of each the terrain 
+def calculateTerrainInfo(parcelArrayReduced, geoArrayReduced):
+    parcel = np.unique(parcelArrayReduced).tolist()[0] # to consider only the 9999
+    heightList = geoArrayReduced[parcelArrayReduced == parcel]
+    n_elem = np.count_nonzero(~np.isnan(heightList))
+    max_val = np.nanmax(heightList)
+    min_val = np.nanmin(heightList)
+    mean_val = np.nanmean(heightList)
+    median_val = np.median(heightList[~np.isnan(heightList)])
+    terrainInfo = {'median': median_val, 'mean': mean_val,'max': max_val,'min': min_val, 'n_elem': n_elem}
+    return terrainInfo
+
+
+  
 #Calculate the new velocity value over each point        
 def newCalculatedVelocity(height, meanVel, Zo_local):
         global newvel,Uubl,Zubl,Zo_ref
@@ -416,23 +441,47 @@ def CalculateRugosity(medheight, density):
         if x==2.5:
             r = 1.5
             print 'Rugosity = %s' % r
-        
+ 
+
+def calculate(n_elements = 40):
+    dim_X , dim_Y = geoArray.shape
+    # np.arange does not include the stop (2on term), because of this I have to increase the stop 
+    list_y = np.arange(0, dim_Y+1, dim_Y/n_elements)
+    list_y = list_y.tolist()
+    list_x = np.arange(0, dim_X+1, dim_X/n_elements)
+    list_x = list_x.tolist()
+    for y in range(1,len(list_y)):
+        y_0 = list_y[y-1]
+        y_1 = list_y[y]
+        for x in range(1,len(list_x)):
+            x_0 = list_x[x-1]
+            x_1 = list_x[x]
+            geoReducedArray = geoArray[y_0:y_1,x_0:x_1]
+            parcelReducedArray = parcelArray[y_0:y_1,x_0:x_1]
+            mean_vel = meshMeanVelArray[y-1][x-1]
+            parcelInfo = calculateParcelInfo(parcelReducedArray,geoReducedArray)
+            terrainInfo = calculateTerrainInfo(parcelReducedArray,geoReducedArray)
+            print 'y,x ',y-1, x-1
+            print 'mean_vel ', mean_vel
+            print 'terrainInfo ', terrainInfo
+
     
 
 """ Main Code """
 readRasterData(file='barcelona_raster_augusto_3000x3000 v9.asc')
-readRasterParcelData(file = 'barcelona_raster_augusto_500x400.asc')
+readRasterParcelData(file = 'raster_prova_new.asc')
 readInitialVelocityData(vel_from = 0, vel_to = 1)
 pixelsToCoordinatesIni(edgePoints[0]['bottom-left'], edgePoints[0]['top-rigth'])
-createMesh(cols = 400, rows = 400)
+n_elements = 4
+createMesh(cols = n_elements, rows = n_elements)
 calculateMeanVel()
-calculateMeanParcelHeight()
+calculate(n_elements)
 
 """
 # Create a jpeg file with the new interpolated velocity 
 from osgeo import gdalnumeric
 meshMeanVelArrayInteger = meshMeanVelArray.astype(gdalnumeric.uint8)
-gdalnumeric.SaveArray(meshMeanVelArrayInteger, "/home/daniel/Documentos/Ofertes/Recurs Eolic/Estudi/vel2.jpeg", format='JPEG')
+gdalnumeric.SaveArray(meshMeanVelArrayInteger, "/home/daniel/Documentos/Ofertes/Recurs Eolic/Estudi/vel22.jpeg", format='JPEG')
 m_x = meshPixelArray[0:10,0:10,0]
 m_y = meshPixelArray[0:10,0:10,1]
 m_x.tofile("/home/daniel/Documentos/Ofertes/Recurs Eolic/Estudi/x_points.csv", sep=";")
