@@ -24,9 +24,8 @@ def pixelsToCoordinatesIni(P1,P2):
     #        'y': -29683.0   }
     #p2 = {  'x': 135770.0,
     #        'y': -14263.0   }           
-
-    p1 = {  'x': 928133.272888,
-            'y': 4587378.29794  }
+    p1 = {  'x': 927880.58994,            #[931795.81889, 4587921.18459] -> [ 1257.59284315, 446.91622054]
+            'y': 4587530.55698 }   
     p2 = {  'x': 933192.459425,
             'y': 4603732.11196 }
     #Calculate de translation vector, P1 - T = p1            
@@ -62,9 +61,6 @@ def pixelsToCoordinatesIni(P1,P2):
 
 # Coordinates to pixels
 def coordinatesToPixels(p):
-#    p = [124660,-18945]
-#    p = [129668,-29854]
-#    p = [135757,-14281]
     #Change the point to an array
     if not isinstance(p, np.ndarray):
         p = np.array(p)
@@ -93,7 +89,8 @@ def coordinatesToPixels(p):
 
     #Return the new value
     return p_new
-    
+   
+   
 
 # Reading velocity data (values are stored in a matrix called velArray)
 def readInitialVelocityData(vel_from = 0, vel_to = 39):
@@ -376,72 +373,84 @@ def calculateTerrainInfo(parcelArrayReduced, geoArrayReduced):
   
 #Calculate the new velocity value over each point        
 def newCalculatedVelocity(height, meanVel, Zo_local):
-        global newvel,Uubl,Zubl,Zo_ref
-        print('Calculating new velocities')
-        Zo_ref = 0.14
-        Zubl = 200
-        Uubl = meanVel*(log(Zubl/Zo_ref)/log(10/Zo_ref))
-        newVel = Uubl*(log(height/Zo_local)/log(Zubl/Zo_local))
-        
-        return newVel  
-        
+    print('Calculating new velocities')
+    Zo_ref = 0.14
+    Zubl = 200
+    Uubl = meanVel*(np.log(Zubl/Zo_ref)/np.log(10/Zo_ref))
+    newVel = Uubl*(np.log(height/Zo_local)/np.log(Zubl/Zo_local))
+    return newVel  
+  
+      
 #Calculate Medium height in each parcel             
-def CalculateMediumHeight(height):
-        global medheight
-        medheight
-        
-        return medheight
+def CalculateMediumHeight(parcelInfo, terrainInfo):
+    parcelMediumHeight = []
+    terrainHeight = terrainInfo['median']
+    for parcel in parcelInfo.keys():
+        parcelMeanHeight = parcelInfo[parcel]['mean']
+        parcelMinHeight = parcelInfo[parcel]['min']
+        if terrainHeight < parcelMinHeight :
+            parcelHeight = parcelMeanHeight - terrainHeight
+        else:
+            parcelHeight = parcelMeanHeight - parcelMinHeight
+        parcelMediumHeight.append(parcelHeight)
+    parcelMediumHeight = np.array(parcelMediumHeight)
+    medheight = np.nanmean(parcelMediumHeight)
+    return medheight
+
         
 #Calculate Buildings density in each parcel             
-def CalculateBuildingDensity():
+def CalculateBuildingDensity(parcelInfo, terrainInfo):
+    #parcelLen = len(parcelInfo.keys())
+    parcelElements = 0
+    for parcel in parcelInfo.keys():
+        parcelElements = parcelElements + parcelInfo[parcel]['n_elem']
+    terrainElements = terrainInfo['n_elem']
+    density = parcelElements / (parcelElements + terrainElements) if (parcelElements + terrainElements) > 0 else 0
+    return density        
         
-        
-        return density        
-        
+
 #Calculate rugosity in each parcel             
-def CalculateRugosity(medheight, density):
-        global Zo, h, d
-        
-        print('Clasificating Parcel Height')
-        if 5 < medheight <= 7.5: 
-            print('Low range')
-            h = 1
-        if 7.5 < medheight <= 12: 
-            print('Medium range')
-            h = 2
-        if 12 < medheight <= 20:
-            print('Tall range')
-            h = 3
-        if medheight > 20:
-            print('high-rise')
-            h = 4
-        else: 
-            print('Land')
-            h = 0                     #We considered there is no construction
-             
-        print('Clasificating Parcel density')
-        if 0.2 > density:
-            print ('Low density')
-            d = 0
-        if 0.2 < density < 0.4:
-            print ('Medium density')
-            d = 1
-        if 0.4 < density:
-            print ('High density')
-            d = 2
-        else: 
-            print('Error Calculating Density')
-        
-        print('Calculating Zo')
-        global x, r                       #r=Rugosty
-        x=((h+d)/2)
-        if x>2.5:
-            r=2
-            print 'Rugosity = %s' % r
-        if x==2.5:
-            r = 1.5
-            print 'Rugosity = %s' % r
- 
+def CalculateRugosity(medheight, density):     
+    # Clasificating Parcel Height
+    if 5 < medheight <= 7.5: 
+        #print('Low range')
+        h = 1
+    if 7.5 < medheight <= 12: 
+        #print('Medium range')
+        h = 2
+    if 12 < medheight <= 20:
+        #print('Tall range')
+        h = 3
+    if medheight > 20:
+        #print('high-rise')
+        h = 4
+    else: 
+        #print('Land')
+        h = 0                     
+         
+    # Clasificating Parcel density
+    if 0.2 > density:
+        #print ('Low density')
+        d = 0
+    if 0.2 <= density <= 0.4:
+        #print ('Medium density')
+        d = 1
+    if 0.4 < density:
+        #print ('High density')
+        d = 2
+    else: 
+        print('Error Calculating Density')
+    
+    # Calculating Rugosity (Zo)
+    x = (h+d)/2.0
+    if x > 2.5:
+        rugosity = 2.0
+        #print 'Rugosity = %s' % r
+    if x == 2.5:
+        rugosity = 1.5
+        #print 'Rugosity = %s' % r
+    return rugosity
+
 
 def calculate(n_elements = 40):
     dim_X , dim_Y = geoArray.shape
@@ -461,10 +470,13 @@ def calculate(n_elements = 40):
             mean_vel = meshMeanVelArray[y-1][x-1]
             parcelInfo = calculateParcelInfo(parcelReducedArray,geoReducedArray)
             terrainInfo = calculateTerrainInfo(parcelReducedArray,geoReducedArray)
+            density = CalculateBuildingDensity(parcelInfo, terrainInfo)
+            mediumHeight = CalculateMediumHeight(parcelInfo, terrainInfo)
+            rugosity = CalculateRugosity(mediumHeight, density)
             print 'y,x ',y-1, x-1
             print 'mean_vel ', mean_vel
             print 'terrainInfo ', terrainInfo
-
+            
     
 
 """ Main Code """
