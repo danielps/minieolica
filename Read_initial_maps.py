@@ -7,12 +7,12 @@ Script per calcular el recurs mini eolic
 # Libraries
 from PIL import Image
 from osgeo import gdal
-from osgeo import gdal_array
 from osgeo import osr
 import numpy as np
 import os.path
 import math
 import time
+import csv
 
 
 # Find the different information (translation, rotation and scalefactor) needed to change pixels to coordinates 
@@ -145,10 +145,10 @@ def readInitialVelocityData(vel_from = 0, vel_to = 39):
                             pix_min_x = [x,abs(y-height)]
                     rgb = (str(r), str(g), str(b))
                     velArray[x,abs(y-height)] = rgb_colors_values[', '.join(rgb)]
-                if (x == width_25) : print '25% done'
-                if (x == width_50) : print '50% done'
-                if (x == width_75) : print '75% done'
-                if (x == width_100): print '100% done'
+                if (x == width_25) : print '    25% done'
+                if (x == width_50) : print '    50% done'
+                if (x == width_75) : print '    75% done'
+                if (x == width_100): print '    100% done'
             edgePoints[i] = {'top-rigth': pix_max_x, 'bottom-left': pix_min_x}
             
 
@@ -300,7 +300,7 @@ def calculateMeanVel():
                             pointVelocity.append(vel)
             meshMeanVelArray[x][y] = mean(pointVelocity)
         if y in listPercentage:
-            print '%s%% done in %s seconds' % (str(y*100/dim_Y), str(round(time.time()-t0,0)))
+            print '    %s%% done in %s seconds' % (str(y*100/dim_Y), str(round(time.time()-t0,0)))
             t0 = time.time()
 
 
@@ -359,25 +359,25 @@ def calculateParcelInfo(parcelArrayReduced, geoArrayReduced):
 
 # Given a reduced parcelArray and geoArray it returns a dictionary with the info of each the terrain 
 def calculateTerrainInfo(parcelArrayReduced, geoArrayReduced):
-    parcel = np.unique(parcelArrayReduced).tolist()[0] # to consider only the 9999
-    heightList = geoArrayReduced[parcelArrayReduced == parcel]
+    terrain = np.unique(parcelArrayReduced).tolist()[0] # to consider only the 9999
+    heightList = geoArrayReduced[parcelArrayReduced == terrain]
     n_elem = np.count_nonzero(~np.isnan(heightList))
     max_val = np.nanmax(heightList)
     min_val = np.nanmin(heightList)
     mean_val = np.nanmean(heightList)
     median_val = np.median(heightList[~np.isnan(heightList)])
-    terrainInfo = {'median': median_val, 'mean': mean_val,'max': max_val,'min': min_val, 'n_elem': n_elem}
+    std_val = np.nanstd(heightList)
+    terrainInfo = {'median': median_val, 'mean': mean_val, 'std': std_val,'max': max_val,'min': min_val, 'n_elem': n_elem}
     return terrainInfo
 
 
   
 #Calculate the new velocity value over each point        
-def newCalculatedVelocity(height, meanVel, Zo_local):
-    print('Calculating new velocities')
+def newCalculatedVelocity(height, Zo_local, displacement):
     Zo_ref = 0.14
     Zubl = 200
-    Uubl = meanVel*(np.log(Zubl/Zo_ref)/np.log(10/Zo_ref))
-    newVel = Uubl*(np.log(height/Zo_local)/np.log(Zubl/Zo_local))
+    Uubl = 1.0*(np.log(Zubl/Zo_ref)/np.log(10/Zo_ref))
+    newVel = Uubl*(np.log((height-displacement)/Zo_local)/np.log((Zubl-displacement)/Zo_local))
     return newVel  
   
       
@@ -401,64 +401,137 @@ def CalculateMediumHeight(parcelInfo, terrainInfo):
 #Calculate Buildings density in each parcel             
 def CalculateBuildingDensity(parcelInfo, terrainInfo):
     #parcelLen = len(parcelInfo.keys())
-    parcelElements = 0
+    parcelElements = 0.0
     for parcel in parcelInfo.keys():
-        parcelElements = parcelElements + parcelInfo[parcel]['n_elem']
-    terrainElements = terrainInfo['n_elem']
-    density = parcelElements / (parcelElements + terrainElements) if (parcelElements + terrainElements) > 0 else 0
+        parcelElements = parcelElements + float(parcelInfo[parcel]['n_elem'])
+    terrainElements = float(terrainInfo['n_elem'])
+    if (parcelElements + terrainElements) > 0.0 :
+        density = parcelElements / (parcelElements + terrainElements) 
+    else :
+        density = 0.0
     return density        
         
 
-#Calculate rugosity in each parcel             
-def CalculateRugosity(medheight, density):     
-    # Clasificating Parcel Height
-    if 5 < medheight <= 7.5: 
-        #print('Low range')
-        h = 1
-    if 7.5 < medheight <= 12: 
-        #print('Medium range')
-        h = 2
-    if 12 < medheight <= 20:
-        #print('Tall range')
-        h = 3
-    if medheight > 20:
-        #print('high-rise')
-        h = 4
-    else: 
-        #print('Land')
-        h = 0                     
-         
-    # Clasificating Parcel density
-    if 0.2 > density:
-        #print ('Low density')
-        d = 0
-    if 0.2 <= density <= 0.4:
-        #print ('Medium density')
-        d = 1
-    if 0.4 < density:
-        #print ('High density')
-        d = 2
-    else: 
-        print('Error Calculating Density')
-    
-    # Calculating Rugosity (Zo)
-    x = (h+d)/2.0
-    if x > 2.5:
-        rugosity = 2.0
-        #print 'Rugosity = %s' % r
-    if x == 2.5:
-        rugosity = 1.5
-        #print 'Rugosity = %s' % r
-    return rugosity
+#Calculate rugosity and displacement height in each element of the mesh             
+def CalculateRugosityDisplacement(medheight, density):     
+    if density >= 0.6:
+        d = medheight*0.65
+        if medheight >= 20:
+            h = 4
+        elif medheight >= 12: 
+            h = 3
+        elif medheight >= 7.5: 
+            h = 2
+        elif medheight >= 5.0: 
+            h = 1
+        else:
+            h = 0.14            
+    elif density >= 0.4:
+        d = medheight*0.5
+        if medheight >= 20:
+            h = 2
+        elif medheight >= 12: 
+            h = 1.6
+        elif medheight >= 7.5: 
+            h = 1.4
+        elif medheight >= 5.0: 
+            h = 0.8
+        else:
+            h = 0.14            
+    elif density >= 0.2:
+        d = medheight*0.35
+        if medheight >= 20:
+            h = 1.7
+        elif medheight >= 12: 
+            h = 1.3
+        elif medheight >= 7.5: 
+            h = 1
+        elif medheight >= 5.0: 
+            h = 0.7
+        else:
+            h = 0.14   
+    else:
+        d = medheight*0.06
+        if medheight >= 20:
+            h = 1.4
+        elif medheight >= 12: 
+            h = 1.1
+        elif medheight >= 7.5: 
+            h = 0.9
+        elif medheight >= 5.0: 
+            h = 0.6
+        else:
+            h = 0.14         
+    return h,d
+
+# Calculo la alcada real del punt, si la alcada del terreny es uniforme (std < 10) la alcada sera directa,
+# sino busco la alcada del terrey proper a la parcela 
+def CalculateParcelTerrainHeight(terrainInfo, pointParcel, parcelArrayReduced, geoArrayReduced):
+    parcelList = np.unique(parcelArrayReduced).tolist()[1:] #list of parcels without 9999
+    parcelsTerrainInfo = {}
+    terrainHeight = float(terrainInfo['median'])
+    terrainStd = float(terrainInfo['std'])
+    dim_X, dim_Y = parcelArrayReduced.shape
+    terrainId = np.unique(parcelArrayReduced).tolist()[0] # to consider only the 9999
+    terrainPoints = parcelArrayReduced == terrainId
+    for parcel in parcelList:    
+        parcelMinHeight = float(pointParcel[parcel]['min'])
+        if terrainStd < 10.0:    # Element de la malla casi pla
+            if terrainHeight < parcelMinHeight:
+                height = terrainHeight
+            else:
+                height = parcelMinHeight
+        else:
+            #Si no es pla: busco els punts del terreny llindars a la parcela per calcular la alcada
+            parcelPointsIndex = np.where(parcelArrayReduced == parcel)
+            aux = np.empty((dim_X,dim_Y),dtype='bool')
+            aux[:] = False
+            for i in range(len(parcelPointsIndex[0])):
+                x = parcelPointsIndex[0][i]
+                y = parcelPointsIndex[1][i]
+                aux[x-2:x+2,y-2:y+2] = True
+            closedTerrainPoints = terrainPoints*aux
+            closedTerrainPointsHeight = geoArrayReduced[closedTerrainPoints==True]
+            closedTerrainHeight = np.nanmean(closedTerrainPointsHeight)
+            #closedTerrainStd = np.nanstd(closedTerrainPointsHeight)
+            if closedTerrainHeight is not np.nan:    #Si no hi ha punts terreny llindars faig servir terrainHeight 
+                height = closedTerrainHeight
+                #if closedTerrainStd > 10.0:
+                    #print 'error parcel: %s std: %s' %(parcelId,closedTerrainStd)
+            else:
+                if terrainHeight < parcelMinHeight:
+                    height = terrainHeight
+                else:
+                    height = parcelMinHeight
+        parcelsTerrainInfo[parcel] = height
+    return parcelsTerrainInfo
 
 
-def calculate(n_elements = 40):
+# Calculo la alcada real del punt, si la alcada del terreny es uniforme (std < 10) la alcada sera directa,
+# sino busco la alcada del terrey proper a la parcela 
+def CalculatePointHeight(initialHeight, pointParcelInfo, terrainHeight):
+    if initialHeight is not np.nan and pointParcelInfo is not np.nan:
+        height = initialHeight - terrainHeight
+        if height < 2:
+            height = np.nan
+    else:
+        height = np.nan
+    return height
+
+
+def calculate(n_elements = 50, vel_from = 0, vel_to = 1):
+    print('Calculating the new velocities')
     dim_X , dim_Y = geoArray.shape
+    newVelPoint = np.empty((dim_X,dim_Y)) 
+    newVelPoint[:] = np.nan
     # np.arange does not include the stop (2on term), because of this I have to increase the stop 
     list_y = np.arange(0, dim_Y+1, dim_Y/n_elements)
     list_y = list_y.tolist()
     list_x = np.arange(0, dim_X+1, dim_X/n_elements)
     list_x = list_x.tolist()
+    intervalPercentage = 10
+    listPercentage = [int(len(list_y)*x/100.0) for x in range(0,101,intervalPercentage)]
+    t0 = time.time()
     for y in range(1,len(list_y)):
         y_0 = list_y[y-1]
         y_1 = list_y[y]
@@ -467,27 +540,59 @@ def calculate(n_elements = 40):
             x_1 = list_x[x]
             geoReducedArray = geoArray[y_0:y_1,x_0:x_1]
             parcelReducedArray = parcelArray[y_0:y_1,x_0:x_1]
-            mean_vel = meshMeanVelArray[y-1][x-1]
+            #meanVel = meshMeanVelArray[y-1][x-1]
             parcelInfo = calculateParcelInfo(parcelReducedArray,geoReducedArray)
             terrainInfo = calculateTerrainInfo(parcelReducedArray,geoReducedArray)
             density = CalculateBuildingDensity(parcelInfo, terrainInfo)
             mediumHeight = CalculateMediumHeight(parcelInfo, terrainInfo)
-            rugosity = CalculateRugosity(mediumHeight, density)
-            print 'y,x ',y-1, x-1
-            print 'mean_vel ', mean_vel
-            print 'terrainInfo ', terrainInfo
+            rugosity,displacement = CalculateRugosityDisplacement(mediumHeight, density)
+            parcelTerrainHeightInfo = CalculateParcelTerrainHeight(terrainInfo, parcelInfo, parcelReducedArray, geoReducedArray)
+            for y_point in range(y_0,y_1):
+                for x_point in range(x_0,x_1):
+                    pointParcelInfo = parcelInfo[parcelArray[y_point,x_point]] if parcelArray[y_point,x_point] in parcelInfo.keys() else np.nan
+                    pointParcelTerrainHeightInfo = parcelTerrainHeightInfo[parcelArray[y_point,x_point]] if parcelArray[y_point,x_point] in parcelTerrainHeightInfo.keys() else np.nan
+                    height = CalculatePointHeight(geoArray[y_point,x_point], pointParcelInfo, pointParcelTerrainHeightInfo)
+                    #height = np.nan
+                    if height is not np.nan:
+                        #print 'newVel'
+                        newVelPoint[y_point][x_point] = height #newCalculatedVelocity(height, rugosity, displacement)
+                    else:
+                        newVelPoint[y_point][x_point] = np.nan #terrainInfo['std'] # posar-hi la vel del mapa sense fer avg ???
+        if y in listPercentage:
+            print '     %s%% done in %s seconds' % (str(y*100/len(list_y)), str(round(time.time()-t0,0)))
+            t0 = time.time()
+
+    path_res = '/home/daniel/Documentos/Ofertes/Recurs Eolic/Estudi/Results/'
+    seq = (str(vel_from),str(vel_to))
+    filename = '-'.join(seq) + '.asc'
+    filename = 'buildingHeigth.asc'
+    print('     Saving the info into file %s') % filename
+    fl = open(path_res + filename, 'w')
+    fl.write('NCOLS %s \n' %dim_X)
+    fl.write('NROWS %s \n' %dim_Y)
+    fl.write('XLLCORNER %s \n' %top_left_x)
+    fl.write('YLLCORNER %s \n' %(top_left_y+resolution_y*dim_Y))
+    fl.write('CELLSIZE %s \n' %resolution_x)
+    fl.write('NODATA_VALUE 9999 \n')
+    writer = csv.writer(fl, delimiter=' ')
+    newVelPoint[np.isnan(newVelPoint)] = int(9999)
+    for values in newVelPoint:
+        writer.writerow(values)
+    fl.close()
+
             
     
 
 """ Main Code """
+n_elements = 40
 readRasterData(file='barcelona_raster_augusto_3000x3000 v9.asc')
 readRasterParcelData(file = 'raster_prova_new.asc')
-readInitialVelocityData(vel_from = 0, vel_to = 1)
-pixelsToCoordinatesIni(edgePoints[0]['bottom-left'], edgePoints[0]['top-rigth'])
-n_elements = 4
 createMesh(cols = n_elements, rows = n_elements)
-calculateMeanVel()
-calculate(n_elements)
+for i in range(0,1):    #40 maps
+    #readInitialVelocityData(vel_from = i, vel_to = i+1)
+    #pixelsToCoordinatesIni(edgePoints[0]['bottom-left'], edgePoints[0]['top-rigth'])
+    #calculateMeanVel()
+    calculate(n_elements,vel_from = i, vel_to = i+1)
 
 """
 # Create a jpeg file with the new interpolated velocity 
@@ -499,4 +604,24 @@ m_y = meshPixelArray[0:10,0:10,1]
 m_x.tofile("/home/daniel/Documentos/Ofertes/Recurs Eolic/Estudi/x_points.csv", sep=";")
 m_y.tofile("/home/daniel/Documentos/Ofertes/Recurs Eolic/Estudi/y_points.csv", sep=";")
 meshMeanVelArray.tofile("/home/daniel/Documentos/Ofertes/Recurs Eolic/Estudi/vel_points.csv", sep=";")
+"""
+
+"""
+#Plot an array
+from matplotlib import mpl,pyplot
+# make a color map of fixed colors
+cmap = mpl.colors.ListedColormap(['white','black','red'])
+bounds=[0,-2,2,1]
+norm = mpl.colors.BoundaryNorm(bounds, cmap.N)
+# tell imshow about color map so that only set colors are used
+img = pyplot.imshow(closedTerrainPoints,interpolation='nearest',
+                    cmap = cmap,norm=norm)
+
+# make a color bar
+pyplot.colorbar(img,cmap=cmap,
+                norm=norm,boundaries=bounds,ticks=[0,1])
+                
+pyplot.grid(True,color='white')
+pyplot.show()
+
 """

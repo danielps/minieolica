@@ -533,7 +533,7 @@ def prova(filename = 'raster_prova_new.asc'):
                              '72744056','72744071','72744072','72744073','72744074','72744035','72744037','72744038',
                              '72744039','72744043','72744044','72744045','72744046','72744047',]                             
     parcelsToBeConsidered = []
-    #   '06912001' '06911001'
+    #   '06912001','06911001','07070007','07091009','07091010','07091006','07091008','07091005','07776003'
                              
     if len(parcelsToBeConsidered) > 0:
         readRasterData(file = 'barcelona_raster_augusto_3000x3000 v9.asc')
@@ -592,3 +592,26 @@ def prova(filename = 'raster_prova_new.asc'):
         
     fr.close()
     fl.close() 
+    
+    
+    
+def fixFinalFile(filename = 'raster_prova_new.asc'):
+    #Reading the original file
+    path_geo = '/home/daniel/Documentos/Ofertes/Recurs Eolic/Estudi/Geo Raster/'
+    if os.path.isfile(path_geo + filename):
+        print 'Reading initial parcel from file %s' % filename
+        from numpy import genfromtxt
+        fr = open(path_geo + filename, 'r')
+        l = {}
+        for i in range(6):
+            l[i] = fr.readline()
+        NoDataValue = int(l[5].split(' ')[1])
+        parcelArray = genfromtxt(path_geo + filename, delimiter=' ',skip_header=6)
+        parcelArray[parcelArray == NoDataValue] = np.nan
+        dim_X, dim_Y = parcelArray.shape
+        for x in range(1,dim_X-1):
+            for y in range(1,dim_Y-1):
+                if parcelArray[x,y] is np.nan:
+                    reducedParcelArray = parcelArray[x-1:x+1,y-1:y+1]
+    else:
+        print 'Reading initial parcel, file %s does not exist' % str(path_geo + filename)
